@@ -1,0 +1,59 @@
+name: MarkUp
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    macOS: '14.0'
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: '14.0'
+    ARCHS: arm64 x86_64
+    ONLY_ACTIVE_ARCH: NO
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+packages:
+  MarkUpCore:
+    path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
+targets:
+  MarkUp:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/MarkUpApp
+    dependencies:
+      - package: MarkUpCore
+      - package: Sparkle
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bgoktugozdemir.MarkUp
+        INFOPLIST_FILE: Config/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/MarkUp.entitlements
+        COMBINE_HIDPI_IMAGES: YES
+        LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/../Frameworks
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Config/MarkUp-Debug.entitlements
+    scheme:
+      gatherCoverageData: false
+      testTargets:
+        - MarkUpTests
+  MarkUpTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/MarkUpAppTests
+    dependencies:
+      - target: MarkUp
+      - package: MarkUpCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bgoktugozdemir.MarkUp.Tests
+        GENERATE_INFOPLIST_FILE: YES

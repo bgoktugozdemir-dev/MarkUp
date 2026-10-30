@@ -1,0 +1,31 @@
+{
+  "name": "highlight.js",
+  "version": "11.12.0",
+  "license": "BSD-3-Clause",
+  "source": "https://registry.npmjs.org/highlight.js/-/highlight.js-11.12.0.tgz",
+  "archiveSHA256": "accbfaaab745088609b4eea2bdca2ad62f1f1dd27304e0f8df65cfe0fe042143",
+  "files": {
+    "hljs-core.js": "d67da7c32959fa3391fe148feee926fcffbb0b4d46bf9364b44adbf3c55c3e30",
+    "hljs-swift.js": "0c7b143dcde9f93f668e8f1c57a27bdd85a65f8bce31b8054f8937c51d6611ec",
+    "hljs-bash.js": "134f86c16781d91ee183e4c5f479449e1c0d6b256f2f1db080fdd40252ac2b1c",
+    "hljs-json.js": "c0bdba87c772024fa21d1aebb0cb574a3e007de1fa235b19381411e33e629248",
+    "hljs-yaml.js": "008894ba282fa3436798b08314862ef3d4c39f8fe92a182acc4167d10d17e4c0",
+    "hljs-ini.js": "21eee54329761c77fcf8ef38b42497f602992ef468ea7b578c89fd212cbcdb46",
+    "hljs-javascript.js": "23bf45fcc3fb0f8be29eaad9e5811e41a920f65703fcb97cfef0895b08e150b4",
+    "hljs-typescript.js": "16b73aa6b3d8885b2f6f487ac054c8e8404e9095fc532964777e852f15dd4160",
+    "hljs-python.js": "d42dcd3aaa5777c714fa0eee9dc964b3d5b30874d370a3d1137268634f4755d6",
+    "hljs-xml.js": "449b772da6dc6b2fa217394711e403069a162d95564a2e2d6d0ff43a4ec8eaed",
+    "hljs-css.js": "871b864289d992b523587881929d38216ef2020950ecb30dcce93ec8f8e587ed",
+    "hljs-sql.js": "a0cbca94463751a929701957153fd23552944f47c00da87605f2e0b1f27ff6fb",
+    "hljs-c.js": "84828350e867205dd334105834876c2bdf5d2b88415842ecc6ff579d65682b4b",
+    "hljs-cpp.js": "bf54f444d667b13c344e28e6d7423096fd5b866b2c5249ec7637d5aadd6031e2",
+    "hljs-objectivec.js": "3a410538d1040627da9f664fc109cd5efa8fef655dffc99612d83e2b5af3548b",
+    "hljs-csharp.js": "5a56062e1d82c8f46b99fe15141d57b349c80370580c477efac0472eba29e186",
+    "hljs-java.js": "7addd42a0e613aec66a61b94f9f7d867ab7d6c1fa1cc7d0dfd8ab3040456993d",
+    "hljs-kotlin.js": "016d0e4e0299dd998b4e84346b290bdd5874994634312831288de9e6766dd08a",
+    "hljs-go.js": "59779f6579b6c55ead46ffe04cc4ab09544cb9ae7079de23b1702ac9ae75170a",
+    "hljs-rust.js": "e053dcd22c449e854ae7b34ae3cbadc01242c258ab19130c089b4e4cbeec136b",
+    "hljs-markdown.js": "58fa9024ba2f96190a88e6d5bb5e6c0f744021c0617971f6a0e3d8f85fdfaf19",
+    "hljs-diff.js": "b92758f99cd709ed33d826aded172f39cff8727799a57efaae626423dffa552e"
+  }
+}

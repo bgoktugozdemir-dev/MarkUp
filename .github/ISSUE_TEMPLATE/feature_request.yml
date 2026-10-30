@@ -1,0 +1,13 @@
+name: Feature request
+description: Describe a reading workflow that MarkUp could improve.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Reading problem and desired result
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Anonymous examples or alternatives

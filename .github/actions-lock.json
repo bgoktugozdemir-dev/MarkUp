@@ -1,0 +1,16 @@
+{
+  "verifiedOn": "2026-10-30",
+  "verification": "Official GitHub release API and git ls-remote refs/tags/<version>; both tags resolve directly to commits.",
+  "actions": {
+    "actions/checkout": {
+      "version": "v7.0.1",
+      "commit": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "source": "https://github.com/actions/checkout/releases/tag/v7.0.1"
+    },
+    "actions/upload-artifact": {
+      "version": "v7.0.2",
+      "commit": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+      "source": "https://github.com/actions/upload-artifact/releases/tag/v7.0.2"
+    }
+  }
+}

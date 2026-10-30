@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a reproducible reader issue using anonymous content.
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps and minimal anonymous Markdown
+      description: Never include company documents, annotation text, access credentials, or private paths.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: MarkUp version, macOS version, and Intel or Apple Silicon
+    validations:
+      required: true

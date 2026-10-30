@@ -1,0 +1,46 @@
+name: Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record the actual toolchain and host
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+      - name: Validate action pins, resources, and localization
+        run: |
+          python3 scripts/release-check.py
+          python3 scripts/run-native-tests.py --self-test
+          bash -n scripts/release-prepare.sh
+          xcrun swift-format lint --strict --recursive Sources Tests
+          swift scripts/release-verify-signature.swift --self-test
+      - name: Native unit and integration tests
+        run: swift test --disable-sandbox
+      - name: Native file, watcher, and network boundary checks
+        run: bash scripts/check-native-services.sh
+      - name: Resolve the locked Xcode graph
+        run: xcodebuild -resolvePackageDependencies -project MarkUp.xcodeproj -scheme MarkUp -clonedSourcePackagesDirPath .build/xcode-packages -onlyUsePackageVersionsFromResolvedFile
+      - name: Build and inspect Universal app without distribution credentials
+        run: |
+          xcodebuild -project MarkUp.xcodeproj -scheme MarkUp -configuration Release -destination 'generic/platform=macOS' -derivedDataPath .build/ci -clonedSourcePackagesDirPath .build/xcode-packages -onlyUsePackageVersionsFromResolvedFile ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+          python3 scripts/release-verify.py .build/ci/Build/Products/Release/MarkUp.app --unsigned
+      - name: App-hosted native rendering and PDF tests
+        run: python3 scripts/run-native-tests.py

@@ -1,0 +1,68 @@
+name: Prepare signed release assets
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+jobs:
+  checks:
+    # Manual dispatch must select a reviewed version tag, never a PR or arbitrary branch.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/release-check.py
+      - run: xcrun swift-format lint --strict --recursive Sources Tests
+      - run: swift test --disable-sandbox
+      - run: bash scripts/check-native-services.sh
+      - name: App-hosted native rendering and PDF tests
+        run: xcodebuild -project MarkUp.xcodeproj -scheme MarkUp -configuration Debug -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/release-tests -clonedSourcePackagesDirPath .build/xcode-packages -onlyUsePackageVersionsFromResolvedFile -enableCodeCoverage NO ONLY_ACTIVE_ARCH=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual test
+      - run: swift scripts/release-verify-signature.swift --self-test
+  prepare:
+    needs: checks
+    runs-on: macos-15
+    timeout-minutes: 60
+    # Configure required reviewers and v* deployment-tag restrictions before setting secrets.
+    environment: release
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+      RELEASE_REPOSITORY: ${{ vars.RELEASE_REPOSITORY }}
+      DEVELOPMENT_TEAM: ${{ vars.DEVELOPMENT_TEAM }}
+      DEVELOPER_ID_APPLICATION: ${{ vars.DEVELOPER_ID_APPLICATION }}
+      MARKUP_UPDATE_FEED: ${{ vars.MARKUP_UPDATE_FEED }}
+      MARKUP_UPDATE_PUBLIC_KEY: ${{ vars.MARKUP_UPDATE_PUBLIC_KEY }}
+      MARKUP_DOWNLOAD_URL_PREFIX: ${{ vars.MARKUP_DOWNLOAD_URL_PREFIX }}
+      RELEASE_VERSION_TAG: ${{ github.ref_name }}
+      RELEASE_BUILD_NUMBER: ${{ github.run_number }}
+      CERTIFICATE_P12_BASE64: ${{ secrets.CERTIFICATE_P12_BASE64 }}
+      CERTIFICATE_P12_PASSWORD: ${{ secrets.CERTIFICATE_P12_PASSWORD }}
+      NOTARY_API_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Explain missing owner setup before touching keychains
+        run: bash scripts/release-prepare.sh --preflight
+      - name: Archive, export, notarize, staple, and sign final bytes
+        run: bash scripts/release-prepare.sh
+      - name: Preserve reviewable assets without publishing a release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MarkUp-${{ github.ref_name }}-review
+          path: artifacts/release/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
