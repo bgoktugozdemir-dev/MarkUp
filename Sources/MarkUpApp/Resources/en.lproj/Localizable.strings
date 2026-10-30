@@ -2,6 +2,7 @@
 "A calm place for Markdown." = "A calm place for Markdown.";
 "A calm place to read. Türkçe: İı Şş Ğğ — 123" = "A calm place to read. Türkçe: İı Şş Ğğ — 123";
 "Actual Size" = "Actual Size";
+"All code is already visible" = "All code is already visible";
 "Allow remote images by default" = "Allow remote images by default";
 "Annotation storage could not be updated. Your documents were not changed." = "Annotation storage could not be updated. Your documents were not changed.";
 "Annotation storage needs recovery. Existing recovery data has been preserved; adding marks is disabled." = "Annotation storage needs recovery. Existing recovery data has been preserved; adding marks is disabled.";
@@ -82,6 +83,7 @@
 "Language" = "Language";
 "Letter" = "Letter";
 "Light" = "Light";
+"Limit code height" = "Limit code height";
 "Line Spacing" = "Line Spacing";
 "Line numbers for this code block" = "Line numbers for this code block";
 "Lines" = "Lines";
@@ -135,6 +137,7 @@
 "Select text to highlight or underline it." = "Select text to highlight or underline it.";
 "Semibold" = "Semibold";
 "Show Annotations" = "Show Annotations";
+"Show all code" = "Show all code";
 "Show line numbers" = "Show line numbers";
 "Show minimap" = "Show minimap";
 "Show outline" = "Show outline";

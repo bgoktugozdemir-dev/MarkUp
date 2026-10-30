@@ -11,7 +11,7 @@ The execution matrix and remaining validation gates are in [VERIFICATION.md](VER
 | YAML frontmatter | Visible metadata block; never executed as configuration |
 | HTML/details | Readable safe fallback; no browser, scripts, event handlers or embedded applications |
 | Mermaid, math and MDX | Readable source; no execution/diagram engine |
-| Code | Offline language grammars; unknown languages remain copyable plain text; per-block wrap, line numbers and horizontal scrolling |
+| Code | Offline language grammars; unknown languages remain copyable plain text; integrated rounded panels with per-block wrap, line numbers, horizontal scrolling and an optional height limit |
 | Themes | Six families / nine original palettes; independent from application appearance |
 | Images | Platform-decoded bounded raster data; local resources need explicit folder access; remote loading is opt-in; double-click loaded images for a resizable preview |
 | Wide tables | Local horizontal scrolling on screen; print pipeline wraps/flows long rows and repeats labels |

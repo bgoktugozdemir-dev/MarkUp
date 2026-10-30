@@ -62,3 +62,27 @@ exceptions (warm opening, refresh, idle CPU and one slightly slower cold sample)
 remain explicit in `PERFORMANCE.md`. All independent local implementation work is
 complete. Signing/update installation and additional OS/hardware/accessibility
 checks remain owner-operated gates, not claimed passes.
+
+## Code-panel follow-up (2026-10-31)
+
+The owner requested a unified rounded code surface, compact header controls and
+a per-block full-height/limited-height toggle, explicitly confirming height rather
+than width. Sol (explicit `gpt-6.1-sol`, high) owns CodeBlockControls and its native
+tests; root owns localization, integration and actual UI verification; Astra
+(explicit `gpt-6-astra`, high) independently reviews native glyph/selection/export
+invariants and the Local Network diagnosis. No default collapsing or nested
+vertical scroll area is introduced.
+
+The Local Network request is consistent with the earlier native Print-panel test
+and system Bonjour printer discovery. The available evidence does not establish
+the exact request at the screenshot timestamp. No network permission is granted
+and no entitlement is removed to hide the prompt. See SECURITY.md.
+
+Follow-up completion evidence: 52 native tests / 12 suites passed in 10.538 seconds,
+wrapper exit 0; formatting and release checks passed (170 localization keys).
+Universal archive and local strict signature checks passed. Actual dark/light,
+EN/TR, limit/show-all, search-reveal, wrap/numbers and copy-feedback checks passed.
+Performance numbers remain attributed to the preceding V1 baseline.
+Astra independently verified the final logs and diff and approved integrated
+acceptance; no follow-up blocker remained. Existing external release gates are
+unchanged.

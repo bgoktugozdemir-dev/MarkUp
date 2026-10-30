@@ -5,6 +5,9 @@ import json
 import re
 
 translations = '''Open Recent|Son Kullanılanları Aç
+Show all code|Kodun tamamını göster
+Limit code height|Kod yüksekliğini sınırla
+All code is already visible|Kodun tamamı zaten görünüyor
 Clear Recent Documents|Son Kullanılan Belgeleri Temizle
 Undo|Geri Al
 Redo|Yinele

@@ -15,7 +15,7 @@ The root model identity is not exposed and cannot be switched by a prompt. Runti
 | Core regression suite | 33 executed tests passed; one opt-in performance test skipped in the ordinary run. Swift Testing reports 34 total. `build-core-final.log` |
 | Full app-hosted suite | **49 tests / 12 suites passed**, 10.411 seconds test execution; the new native-test wrapper exited 0 and Xcode reported `TEST SUCCEEDED`. `build-app-payload-final49.log` and `build/Tests/Logs/Test/` |
 | Source formatting | `xcrun swift-format lint --strict --recursive Sources Tests` passed; warnings were corrected rather than suppressed |
-| Dependency/action/localization checks | `scripts/release-check.py` passed: 2 verified full-SHA Actions, 22 pinned grammar assets, 167 EN/TR strings plus plural catalogs |
+| Dependency/action/localization checks | `scripts/release-check.py` passed: 2 verified full-SHA Actions, 22 pinned grammar assets, 170 EN/TR strings plus plural catalogs |
 | Native watcher/resource harness | Actual atomic replacement, rename, delete/recreate and close callbacks passed; HTTPS literal-address/credential/scheme policy passed. `build-services-final2.log` |
 | Update signature primitive | Valid, tampered and wrong-key Ed25519 checks passed. `build-update-selftest.log`; this is not a Sparkle installation test |
 | Owner configuration preflight | Correctly refuses missing configuration before importing credentials; `build-preflight.log` |
@@ -45,6 +45,37 @@ Heap inspection then found a second retained source copy in closed SwiftUI docum
 
 Final Release measurements and final smoke observations are recorded in [PERFORMANCE.md](PERFORMANCE.md). A concurrent-build idle sample was discarded and is explicitly marked invalid in `artifacts/idle-overlapped-discarded.json`.
 
+## Integrated code-panel follow-up
+
+The 2026-10-31 follow-up uses one rounded theme-colored code surface and compact
+localized icon controls. Blocks start fully expanded; each long block can be
+limited to 12 visual rows. Native glyph folding preserves canonical UTF-16 ranges,
+full copy and separate PDF content. Search/selection reveals hidden code. Short
+blocks disable the height action, and narrow headers expose an options menu.
+
+Astra independently reviewed the glyph/layout, annotation, selection and export
+boundaries. The first hosted run exposed AppKit changing icon position after
+localized title assignment. The implementation now restores icon-only positioning
+after refresh and copy-feedback transitions; the strict assertion was retained.
+The corrected run passed **52 tests / 12 suites in 10.538 seconds** (local log:
+`build-app-codeblocks-final.log`). The suite includes wrapped/unwrapped folding,
+following-prose geometry/hit testing, full native copy, selection reveal, refresh
+and resize state, annotation paint and export-attribute preservation. Strict
+Swift formatting and release checks passed with 170 EN/TR keys. The native-test
+wrapper exited 0 and Xcode reported TEST SUCCEEDED.
+
+The refreshed optimized Universal app was inspected through native UI controls:
+one rounded shared surface, icon-only header, full/limited toggle, following
+prose moving up, disabled short-block control, line-number and wrap states, copy
+feedback, and automatic expansion of the hidden `func section8` search result
+were observed. Dark and light appearances and both English/Turkish action labels
+were checked; the previous English/System preferences were restored. No Print
+panel was reopened for this follow-up. The Release archive succeeded
+(`build-release-codeblocks.log`); all six Mach-O binaries retain arm64/x86_64
+slices, and the local review copy passes strict nested signature verification.
+Only arm64 was executed. Performance figures remain the earlier V1 baseline as
+explicitly identified in PERFORMANCE.md.
+
 ## External and unexecuted release gates
 
 No Git remote, Team ID, Developer ID export, notarization credentials, production update key/feed or authorized release environment is configured. No remote push or public release occurred. Owner setup must precede Developer ID signing/notarization, Gatekeeper acceptance, protected GitHub CI execution, controlled N→N+1 Sparkle download/install/relaunch and invalid-signature installation rejection. See [English release guide](RELEASING.md) and [Turkish owner walkthrough](OWNER_SETUP_TR.md).
@@ -56,7 +87,7 @@ Mermaid rendering, final logo/icon and App Store publication are deliberate late
 ## Local handoff artifacts and readiness
 
 - `build/Review/MarkUp.app`: optimized Universal local review app, ad-hoc signed with development entitlements; App Sandbox remains enabled. The archive strips framework headers, so its local Sparkle framework seal is refreshed before signing the review app. This is not a Developer ID distribution.
-- `build/MarkUp-unsigned.xcarchive`: final unsigned Release archive, built from the payload-fixed source.
+- `build/MarkUp-unsigned.xcarchive`: current unsigned Release archive, including the code-panel follow-up.
 - `artifacts/MarkUp-0.1.0-local-review-universal.zip` and `artifacts/SHA256SUMS`: local review package/checksum; not public release assets.
 - `artifacts/review.pdf`: original public fixture exported and replaced through the real sandboxed Save panel.
 - `artifacts/`: numeric measurements and local diagnostic evidence; ignored by Git.

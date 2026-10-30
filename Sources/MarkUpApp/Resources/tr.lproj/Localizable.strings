@@ -2,6 +2,7 @@
 "A calm place for Markdown." = "Markdown için sakin bir alan.";
 "A calm place to read. Türkçe: İı Şş Ğğ — 123" = "Okumak için sakin bir alan. Türkçe: İı Şş Ğğ — 123";
 "Actual Size" = "Gerçek Boyut";
+"All code is already visible" = "Kodun tamamı zaten görünüyor";
 "Allow remote images by default" = "Uzak görsellere varsayılan olarak izin ver";
 "Annotation storage could not be updated. Your documents were not changed." = "İşaret deposu güncellenemedi. Belgeleriniz değiştirilmedi.";
 "Annotation storage needs recovery. Existing recovery data has been preserved; adding marks is disabled." = "İşaret deposunun kurtarılması gerekiyor. Kurtarma verileri korundu; yeni işaret ekleme devre dışı.";
@@ -82,6 +83,7 @@
 "Language" = "Dil";
 "Letter" = "Letter";
 "Light" = "Açık";
+"Limit code height" = "Kod yüksekliğini sınırla";
 "Line Spacing" = "Satır Aralığı";
 "Line numbers for this code block" = "Bu kod bloğunun satır numaraları";
 "Lines" = "Satırlar";
@@ -135,6 +137,7 @@
 "Select text to highlight or underline it." = "Vurgulamak veya altını çizmek için metin seçin.";
 "Semibold" = "Yarı Kalın";
 "Show Annotations" = "İşaretleri Göster";
+"Show all code" = "Kodun tamamını göster";
 "Show line numbers" = "Satır numaralarını göster";
 "Show minimap" = "Mini haritayı göster";
 "Show outline" = "Başlıkları göster";

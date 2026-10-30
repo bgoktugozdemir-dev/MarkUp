@@ -12,6 +12,8 @@ struct CodeBlockControlsTests {
     let container: CodeTextContainer
     let controls: CodeBlockController
     let rendered: RenderedDocument
+    let document: MarkdownDocument
+    let preferences: ReaderPreferences
     let window: NSWindow
   }
 
@@ -57,7 +59,7 @@ struct CodeBlockControlsTests {
     controls.updateFrames()
     return Reader(
       view: view, layout: layout, container: container, controls: controls, rendered: rendered,
-      window: window)
+      document: document, preferences: preferences, window: window)
   }
 
   @Test func horizontalCodeUsesNativeHitTestingAndContinuousCopy() async throws {
@@ -165,13 +167,13 @@ struct CodeBlockControlsTests {
   @Test func narrowCodeHeaderUsesNonoverlappingOptionsMenu() async throws {
     let reader = try await reader("```swift\nlet value = 1\n```")
     defer { reader.window.close() }
-    reader.container.size.width = 180
+    reader.container.size.width = 160
     reader.controls.containerDidResize()
     reader.view.sizeToFit()
     reader.controls.updateFrames()
     let header = try #require(
       reader.view.subviews.first { $0.subviews.contains { ($0 as? NSButton)?.title == "…" } })
-    #expect(header.frame.width == 180)
+    #expect(header.frame.width == 160)
     header.layoutSubtreeIfNeeded()
     let visible = header.subviews.filter { !$0.isHidden }
     let buttons = visible.compactMap { $0 as? NSButton }
@@ -183,30 +185,143 @@ struct CodeBlockControlsTests {
     }
   }
 
-  @Test func codeHeaderTracksAppearanceAndFitsLocalizedLabels() async throws {
-    let reader = try await reader("```swift\nlet value = 1\n```")
+  @Test func roundedPanelIntegratesPaddedCodeAndLocalizedIconControls() async throws {
+    let reader = try await reader("Before the panel.\n\n```swift\nlet value = 1\n```\n\nAfter.")
     defer { reader.window.close() }
+    let record = try #require(reader.controls.records.first)
     let header = try #require(
-      reader.view.subviews.first { $0.subviews.contains { ($0 as? NSButton)?.title == "…" } })
-    header.appearance = NSAppearance(named: .darkAqua)
-    header.viewDidChangeEffectiveAppearance()
-    let dark = try #require(header.layer?.backgroundColor)
-    header.appearance = NSAppearance(named: .aqua)
-    header.viewDidChangeEffectiveAppearance()
-    let light = try #require(header.layer?.backgroundColor)
-    #expect(dark != light)
-    let checkboxes = header.subviews.compactMap { $0 as? NSButton }.filter {
-      $0.title == localized("Wrap") || $0.title == localized("Lines")
+      reader.view.subviews.first { $0.identifier?.rawValue == "code-block-header" })
+    header.layoutSubtreeIfNeeded()
+    #expect(record.panelFrame.contains(record.headerFrame))
+    #expect(record.headerFrame.maxY < record.frame.minY)
+    #expect(record.panelFrame.maxY > record.frame.maxY + 14)
+    let firstGlyph = reader.layout.glyphIndexForCharacter(at: record.range.location)
+    let firstFragment = reader.layout.lineFragmentRect(forGlyphAt: firstGlyph, effectiveRange: nil)
+    #expect(firstFragment.minX >= record.indent + 16)
+    #expect(record.scrollbarFrame.maxX <= record.panelFrame.maxX - 16)
+    let before = (reader.view.string as NSString).range(of: "Before the panel.")
+    let beforeGlyphs = reader.layout.glyphRange(
+      forCharacterRange: before, actualCharacterRange: nil)
+    let beforeRect = reader.layout.boundingRect(forGlyphRange: beforeGlyphs, in: reader.container)
+    #expect(beforeRect.maxY + reader.view.textContainerOrigin.y <= record.panelFrame.minY)
+    let buttons = header.subviews.compactMap { $0 as? NSButton }.filter { !$0.isHidden }
+    #expect(buttons.count == 4)
+    for button in buttons {
+      #expect(button.imagePosition == .imageOnly)
+      #expect(button.image != nil)
+      #expect(button.toolTip?.isEmpty == false)
+      #expect(header.bounds.contains(button.frame))
+      #expect(!button.isBordered)
     }
-    #expect(checkboxes.count == 2)
-    for checkbox in checkboxes { checkbox.title = "Satır numaraları" }
-    header.frame.size.width = 600
+    let height = try #require(buttons.first { $0.identifier?.rawValue == "code-height" })
+    #expect(!height.isEnabled)
+    #expect(height.accessibilityLabel() == localized("Limit code height"))
+    #expect(height.toolTip == localized("All code is already visible"))
+    let toggles = buttons.filter { $0.title == localized("Wrap") || $0.title == localized("Lines") }
+    #expect(toggles.count == 2)
+    for toggle in toggles { toggle.title = "Satır numaraları için yerelleştirilmiş açıklama" }
     header.needsLayout = true
     header.layoutSubtreeIfNeeded()
-    for checkbox in checkboxes {
-      #expect(!checkbox.isHidden)
-      #expect(checkbox.frame.width >= checkbox.fittingSize.width)
+    for (index, button) in buttons.enumerated() {
+      #expect(button.frame.width == 26)
+      for other in buttons.dropFirst(index + 1) { #expect(!button.frame.intersects(other.frame)) }
     }
+  }
+
+  @Test func screenPanelPreservesAnnotationPaintAndExportAttributes() async throws {
+    let reader = try await reader("```swift\nlet markedValue = 1\n```")
+    defer { reader.window.close() }
+    let original = reader.rendered.attributedString.copy() as! NSAttributedString
+    let range = (original.string as NSString).range(of: "markedValue")
+    let marked = NSMutableAttributedString(attributedString: original)
+    let paint = NSColor.systemYellow.withAlphaComponent(0.32)
+    marked.addAttributes(
+      [.backgroundColor: paint, .underlineStyle: NSUnderlineStyle.single.rawValue], range: range)
+    reader.controls.prepare(
+      marked, rendered: reader.rendered, document: reader.document, preferences: reader.preferences)
+    #expect(
+      marked.attribute(.backgroundColor, at: range.location, effectiveRange: nil) as? NSColor
+        == paint)
+    #expect(
+      marked.attribute(.underlineStyle, at: range.location, effectiveRange: nil) as? Int
+        == NSUnderlineStyle.single.rawValue)
+    let record = try #require(reader.controls.records.first)
+    #expect(
+      marked.attribute(.backgroundColor, at: record.range.location, effectiveRange: nil) == nil)
+    #expect(reader.rendered.attributedString.isEqual(to: original))
+    #expect(marked.string == original.string)
+  }
+
+  @Test(arguments: [false, true])
+  func limitingHeightPreservesCanonicalCopyAndRevealsHiddenSelection(wrap: Bool) async throws {
+    let code =
+      (1...80).map { "line \($0)\tvalue 😀 İ 漢字 " + String(repeating: "long_value_", count: 8) }
+      .joined(separator: "\n") + "\n"
+    let reader = try await reader("Before.\n\n```swift\n" + code + "```\n\nAFTER-END\n")
+    defer { reader.window.close() }
+    let record = try #require(reader.controls.records.first)
+    let original = reader.rendered.attributedString.copy() as! NSAttributedString
+    if wrap { reader.controls.toggleWrap(record.id, enabled: true) }
+    let canonical = reader.view.string
+    let expandedHeight = record.frame.height
+    let after = (canonical as NSString).range(of: "AFTER-END")
+    let afterGlyph = reader.layout.glyphIndexForCharacter(at: after.location)
+    let expandedAfter = reader.layout.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil)
+    #expect(!record.limited)
+    reader.controls.toggleLimit(record.id, enabled: true)
+    let hidden = try #require(record.hiddenRange)
+    #expect(record.limited)
+    #expect(record.frame.height < expandedHeight / 2)
+    let foldedAfter = reader.layout.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil)
+    #expect(foldedAfter.minY < expandedAfter.minY / 2)
+    let hit = reader.layout.characterIndex(
+      for: NSPoint(x: 2, y: foldedAfter.midY), in: reader.container,
+      fractionOfDistanceBetweenInsertionPoints: nil)
+    #expect(hit >= after.location)
+    #expect(reader.view.string == canonical)
+    #expect(reader.rendered.attributedString.isEqual(to: original))
+    reader.view.setSelectedRange(NSRange(location: 0, length: canonical.utf16.count))
+    let pasteboard = NSPasteboard.withUniqueName()
+    #expect(reader.view.writeSelection(to: pasteboard, types: reader.view.writablePasteboardTypes))
+    #expect(pasteboard.string(forType: .string) == canonical)
+    #expect(record.original == code)
+    // The same callback used by search and native keyboard selection must reveal hidden rows,
+    // including wrapped blocks, before horizontal-scrolling checks can return early.
+    let selection = NSRange(location: hidden.location + min(8, hidden.length - 1), length: 0)
+    reader.view.setSelectedRange(selection)
+    reader.controls.revealSelection(selection, previous: NSRange(location: 0, length: 0))
+    #expect(!record.limited && record.hiddenRange == nil)
+    #expect(record.frame.height == expandedHeight)
+    #expect(
+      reader.layout.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil) == expandedAfter)
+    #expect(reader.view.selectedRange() == selection)
+    #expect(reader.view.string == canonical)
+  }
+
+  @Test func limitedStateSurvivesDisplayRefreshAndResizingWithoutChangingSource() async throws {
+    let reader = try await reader(
+      "```swift\n" + String(repeating: "print(\"stable\")\n", count: 100) + "```\n\nAfter.")
+    defer { reader.window.close() }
+    let id = try #require(reader.controls.records.first?.id)
+    reader.controls.toggleLimit(id, enabled: true)
+    let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+    reader.controls.prepare(
+      display, rendered: reader.rendered, document: reader.document, preferences: reader.preferences
+    )
+    reader.view.textStorage?.setAttributedString(display)
+    reader.view.fitDocument()
+    reader.controls.updateFrames()
+    let record = try #require(reader.controls.records.first)
+    #expect(record.id == id && record.limited && record.hiddenRange != nil)
+    reader.container.size.width = 240
+    reader.controls.containerDidResize()
+    reader.view.fitDocument()
+    reader.controls.updateFrames()
+    #expect(record.limited && record.hiddenRange != nil)
+    reader.controls.toggleLimit(id, enabled: false)
+    #expect(!record.limited && record.hiddenRange == nil)
+    #expect(reader.controls.hiddenRanges.isEmpty)
+    #expect(reader.view.string == reader.rendered.attributedString.string)
   }
 
   @Test func textAccessibilityIncludesVisibleNativeCodeControls() async throws {
@@ -233,7 +348,7 @@ struct CodeBlockControlsTests {
     #expect(wrap.accessibilityPerformPress())
     #expect(reader.controls.records.first?.wrap == false)
     #expect(children.compactMap { $0 as? NSTextField }.first?.accessibilityRole() == .staticText)
-    reader.container.size.width = 180
+    reader.container.size.width = 160
     reader.controls.containerDidResize()
     reader.view.fitDocument()
     reader.controls.updateFrames()

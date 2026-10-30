@@ -71,7 +71,7 @@ final class ReaderOverflowTable: NSTextTable {
       // Preserve that geometry; only shift the whole table within its local viewport.
       return proposedRect.offsetBy(dx: -geometry.offset, dy: 0)
     }
-    let available = max(60, size.width - geometry.indent - geometry.gutter)
+    let available = max(60, size.width - geometry.indent - geometry.gutter - 16)
     return NSRect(
       x: geometry.indent + geometry.gutter - geometry.offset,
       y: proposedRect.minY,
@@ -80,9 +80,53 @@ final class ReaderOverflowTable: NSTextTable {
   }
 }
 
-@MainActor final class CodeLayoutManager: NSLayoutManager {
+@MainActor final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
   // Read only from AppKit callbacks after the main-thread assertion below.
   nonisolated(unsafe) weak var codeControls: CodeBlockController?
+
+  override init() {
+    super.init()
+    delegate = self
+  }
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
+    delegate = self
+  }
+
+  nonisolated func layoutManager(
+    _ layoutManager: NSLayoutManager, shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>,
+    properties: UnsafePointer<NSLayoutManager.GlyphProperty>,
+    characterIndexes: UnsafePointer<Int>, font: NSFont, forGlyphRange glyphRange: NSRange
+  ) -> Int {
+    precondition(Thread.isMainThread, "Reader glyphs are main-thread owned")
+    let controls = codeControls
+    let hidden = MainActor.assumeIsolated { controls?.hiddenRanges ?? [] }
+    guard !hidden.isEmpty else { return 0 }
+    var adjusted = Array(UnsafeBufferPointer(start: properties, count: glyphRange.length))
+    var changed = false
+    for index in 0..<glyphRange.length
+    where hidden.contains(where: { NSLocationInRange(characterIndexes[index], $0) }) {
+      adjusted[index] = .null
+      changed = true
+    }
+    guard changed else { return 0 }
+    adjusted.withUnsafeBufferPointer { buffer in
+      layoutManager.setGlyphs(
+        glyphs, properties: buffer.baseAddress!, characterIndexes: characterIndexes,
+        font: font, forGlyphRange: glyphRange)
+    }
+    return glyphRange.length
+  }
+
+  nonisolated func layoutManager(
+    _ layoutManager: NSLayoutManager, shouldUse action: NSLayoutManager.ControlCharacterAction,
+    forControlCharacterAt charIndex: Int
+  ) -> NSLayoutManager.ControlCharacterAction {
+    precondition(Thread.isMainThread, "Reader glyphs are main-thread owned")
+    let controls = codeControls
+    let hidden = MainActor.assumeIsolated { controls?.hiddenRanges ?? [] }
+    return hidden.contains { NSLocationInRange(charIndex, $0) } ? .zeroAdvancement : action
+  }
 
   override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
     let segments = drawingSegments(glyphsToShow, origin: origin)
@@ -95,6 +139,9 @@ final class ReaderOverflowTable: NSTextTable {
   }
 
   override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+    precondition(Thread.isMainThread, "Reader drawing is main-thread owned")
+    let controls = codeControls
+    MainActor.assumeIsolated { controls?.drawPanels() }
     let segments = drawingSegments(glyphsToShow, origin: origin)
     for segment in segments {
       NSGraphicsContext.saveGraphicsState()
@@ -111,7 +158,9 @@ final class ReaderOverflowTable: NSTextTable {
     let controls = codeControls
     let snapshot = MainActor.assumeIsolated {
       (
-        controls?.records.map { ($0.range, $0.indent, $0.gutter) } ?? [],
+        controls?.records.map {
+          ($0.range, $0.indent, $0.gutter, $0.kind == .code ? CGFloat(16) : 0)
+        } ?? [],
         controls?.containerWidth ?? 1, controls?.documentHeight ?? 1
       )
     }
@@ -130,7 +179,7 @@ final class ReaderOverflowTable: NSTextTable {
       // for the text system's native insertion-point and selection hit tests.
       let rect = NSRect(
         x: origin.x + record.1 + record.2,
-        y: origin.y - 1, width: max(1, snapshot.1 - record.1 - record.2),
+        y: origin.y - 1, width: max(1, snapshot.1 - record.1 - record.2 - record.3),
         height: max(1, snapshot.2 + 2))
       result.append((intersection, rect))
       cursor = NSMaxRange(intersection)
@@ -153,6 +202,7 @@ final class ReaderOverflowTable: NSTextTable {
   let indent: CGFloat
   let layoutWidth: CGFloat
   let tabInterval: CGFloat
+  let surfaceColor: NSColor
   var wrap: Bool
   var numbers: Bool
   var offset: CGFloat = 0
@@ -161,14 +211,26 @@ final class ReaderOverflowTable: NSTextTable {
   var headerFrame: CGRect = .zero
   var scrollbarFrame: CGRect = .zero
   var measuredGeometryRevision = -1
+  var limited = false
+  var hiddenRange: NSRange?
+  var foldCandidate: NSRange?
+  var panelFrame: CGRect = .zero
+  var controlColor: NSColor {
+    let rgb = surfaceColor.usingColorSpace(.deviceRGB)
+    let luminance =
+      (rgb?.redComponent ?? 0) * 0.2126
+      + (rgb?.greenComponent ?? 0) * 0.7152 + (rgb?.blueComponent ?? 0) * 0.0722
+    return luminance > 0.5
+      ? NSColor.black.withAlphaComponent(0.72) : NSColor.white.withAlphaComponent(0.78)
+  }
   var gutter: CGFloat {
-    kind == .table ? 0 : (numbers ? max(42, CGFloat(String(lineStarts.count).count) * 8 + 16) : 8)
+    kind == .table ? 0 : (numbers ? max(48, CGFloat(String(lineStarts.count).count) * 8 + 24) : 16)
   }
 
   init(
     id: String, range: NSRange, original: String, language: String, indent: CGFloat,
     font: NSFont, wrap: Bool, numbers: Bool, kind: MarkdownBlockKind = .code,
-    tableWidth: CGFloat? = nil
+    tableWidth: CGFloat? = nil, surfaceColor: NSColor = .textBackgroundColor
   ) {
     self.kind = kind
     self.id = id
@@ -178,6 +240,7 @@ final class ReaderOverflowTable: NSTextTable {
     self.indent = indent
     self.wrap = wrap
     self.numbers = numbers
+    self.surfaceColor = surfaceColor
     tabInterval = max(1, (" " as NSString).size(withAttributes: [.font: font]).width * 4)
     let source = original as NSString
     var starts = [range.location]
@@ -199,10 +262,16 @@ final class ReaderOverflowTable: NSTextTable {
 }
 
 @MainActor final class CodeBlockController {
+  private struct Options {
+    var wrap: Bool?
+    var numbers: Bool?
+    var offset: CGFloat = 0
+    var limited = false
+  }
   weak var textView: ReaderTextView?
   private(set) var records: [CodeBlockRecord] = []
   private var byID: [String: CodeBlockRecord] = [:]
-  private var overrides: [String: (wrap: Bool?, numbers: Bool?, offset: CGFloat)] = [:]
+  private var overrides: [String: Options] = [:]
   private var headers: [String: CodeBlockHeader] = [:]
   private var scrollers: [String: CodeBlockScroller] = [:]
   private var currentPreferences = ReaderPreferences()
@@ -210,6 +279,7 @@ final class ReaderOverflowTable: NSTextTable {
   private(set) var geometryMeasurementCount = 0
   var containerWidth: CGFloat { textView?.textContainer?.size.width ?? 1 }
   var documentHeight: CGFloat { textView?.bounds.height ?? 1 }
+  private(set) var hiddenRanges: [NSRange] = []
 
   init(textView: ReaderTextView) { self.textView = textView }
 
@@ -247,6 +317,7 @@ final class ReaderOverflowTable: NSTextTable {
   ) {
     currentPreferences = preferences
     geometryRevision += 1
+    hiddenRanges = []
     func flatten(_ blocks: [MarkdownBlock]) -> [MarkdownBlock] {
       blocks.flatMap { [$0] + flatten($0.children) }
     }
@@ -283,11 +354,22 @@ final class ReaderOverflowTable: NSTextTable {
         numbers: isTable ? false : saved?.numbers ?? preferences.lineNumbers, kind: block.kind,
         tableWidth: isTable
           ? CGFloat(max(1, source.table?.rows.map(\.count).max() ?? 1)) * 160 * preferences.zoom
-          : nil)
+          : nil,
+        surfaceColor: rendered.attributedString.attribute(
+          .backgroundColor, at: range.location, effectiveRange: nil) as? NSColor
+          ?? .textBackgroundColor)
       record.offset = record.wrap ? 0 : saved?.offset ?? 0
+      record.limited = !isTable && (saved?.limited ?? false)
       if isTable {
         prepareTable(record, storage: display)
       } else {
+        // The screen paints one rounded surface. Preserve annotation backgrounds, while
+        // removing only the renderer's original per-glyph code background from this copy.
+        display.enumerateAttribute(.backgroundColor, in: range) { value, run, _ in
+          if let color = value as? NSColor, color == record.surfaceColor {
+            display.removeAttribute(.backgroundColor, range: run)
+          }
+        }
         applyLayout(record, to: display)
       }
       return record
@@ -353,8 +435,8 @@ final class ReaderOverflowTable: NSTextTable {
       paragraph.tabStops = []
       paragraph.defaultTabInterval = record.tabInterval
       // A toolbar occupies paragraph spacing, not inserted/copied characters.
-      paragraph.paragraphSpacingBefore = cursor == record.range.location ? 34 : 0
-      paragraph.paragraphSpacing = NSMaxRange(line) == NSMaxRange(record.range) ? 20 : 0
+      paragraph.paragraphSpacingBefore = cursor == record.range.location ? 52 : 0
+      paragraph.paragraphSpacing = NSMaxRange(line) == NSMaxRange(record.range) ? 28 : 0
       storage.addAttribute(.paragraphStyle, value: paragraph, range: line)
       cursor = NSMaxRange(line)
     }
@@ -363,6 +445,7 @@ final class ReaderOverflowTable: NSTextTable {
   func containerDidResize() {
     geometryRevision += 1
     guard let storage = textView?.textStorage, let layout = textView?.layoutManager else { return }
+    for record in records where record.kind == .code { invalidateFold(record) }
     for record in records where record.kind == .table {
       guard NSMaxRange(record.range) <= storage.length else { continue }
       storage.enumerateAttribute(.paragraphStyle, in: record.range) { value, _, _ in
@@ -386,6 +469,7 @@ final class ReaderOverflowTable: NSTextTable {
     let visible = text.visibleRect.insetBy(dx: 0, dy: -180)
     var visibleIDs = Set<String>()
     var clamped: [CodeBlockRecord] = []
+    var folds: [CodeBlockRecord] = []
     for record in records {
       guard NSMaxRange(record.range) <= text.string.utf16.count else { continue }
       if record.measuredGeometryRevision != geometryRevision {
@@ -398,11 +482,30 @@ final class ReaderOverflowTable: NSTextTable {
         var contentRight: CGFloat = 0
         if record.kind == .code {
           var cursor = glyphs.location
+          var row = 0
+          if record.hiddenRange == nil { record.foldCandidate = nil }
           while cursor < NSMaxRange(glyphs) {
             var line = NSRange()
             let used = layout.lineFragmentUsedRect(forGlyphAt: cursor, effectiveRange: &line)
             contentRight = max(contentRight, used.maxX)
+            row += 1
+            if row == 13, record.hiddenRange == nil {
+              var boundary = layout.characterIndexForGlyph(at: cursor)
+              let source = text.string as NSString
+              if boundary > record.range.location, source.character(at: boundary - 1) == 10 {
+                boundary -= 1
+              }
+              // Keep the block's final newline so following prose retains its own paragraph.
+              let end = NSMaxRange(record.range) - 1
+              if boundary < end {
+                record.foldCandidate = NSRange(location: boundary, length: end - boundary)
+              }
+            }
             cursor = max(cursor + 1, NSMaxRange(line))
+          }
+          if record.limited, record.hiddenRange == nil, let hidden = record.foldCandidate {
+            record.hiddenRange = hidden
+            folds.append(record)
           }
         }
         let font =
@@ -435,17 +538,21 @@ final class ReaderOverflowTable: NSTextTable {
       let limit = maximumOffset(record)
       if record.offset > limit {
         record.offset = limit
-        var saved = overrides[record.id] ?? (nil, nil, 0)
+        var saved = overrides[record.id] ?? Options()
         saved.offset = limit
         overrides[record.id] = saved
         clamped.append(record)
       }
       record.headerFrame = CGRect(
-        x: record.frame.minX, y: record.frame.minY - 32,
-        width: record.frame.width, height: 28)
+        x: record.frame.minX, y: record.frame.minY - 48,
+        width: record.frame.width, height: 36)
+      record.panelFrame = record.headerFrame.union(record.frame)
+      record.panelFrame.size.height += 24
       record.scrollbarFrame = CGRect(
         x: record.frame.minX + record.gutter,
-        y: record.frame.maxY + 2, width: max(1, record.frame.width - record.gutter), height: 14)
+        y: record.frame.maxY + 4,
+        width: max(1, record.frame.width - record.gutter - (record.kind == .code ? 16 : 0)),
+        height: 14)
       guard record.frame.union(record.headerFrame).intersects(visible) else { continue }
       visibleIDs.insert(record.id)
       if record.kind == .code {
@@ -474,6 +581,21 @@ final class ReaderOverflowTable: NSTextTable {
         scrollers.removeValue(forKey: record.id)?.removeFromSuperview()
       }
     }
+    if !folds.isEmpty {
+      hiddenRanges.append(contentsOf: folds.compactMap(\.hiddenRange))
+      for record in folds {
+        if let range = record.hiddenRange {
+          layout.invalidateGlyphs(
+            forCharacterRange: range, changeInLength: 0, actualCharacterRange: nil)
+        }
+      }
+      geometryRevision += 1
+      text.fitDocument()
+      if let scroll = text.enclosingScrollView { text.frame.size.width = scroll.contentSize.width }
+      updateFrames()
+      text.needsDisplay = true
+      return
+    }
     if !clamped.isEmpty {
       for record in clamped {
         layout.invalidateLayout(forCharacterRange: record.range, actualCharacterRange: nil)
@@ -494,24 +616,63 @@ final class ReaderOverflowTable: NSTextTable {
 
   func toggleWrap(_ id: String, enabled: Bool) {
     guard let record = byID[id] else { return }
-    var options = overrides[id] ?? (nil, nil, 0)
+    var options = overrides[id] ?? Options()
     options.wrap = enabled
     options.offset = 0
     overrides[id] = options
     record.wrap = enabled
     record.offset = 0
+    invalidateFold(record)
     geometryRevision += 1
     relayout(record)
   }
 
   func toggleNumbers(_ id: String, enabled: Bool) {
     guard let record = byID[id] else { return }
-    var options = overrides[id] ?? (nil, nil, 0)
+    var options = overrides[id] ?? Options()
     options.numbers = enabled
     overrides[id] = options
     record.numbers = enabled
+    invalidateFold(record)
     geometryRevision += 1
     relayout(record)
+  }
+
+  func toggleLimit(_ id: String, enabled: Bool) {
+    guard let record = byID[id], record.kind == .code,
+      !enabled || record.foldCandidate != nil
+    else { return }
+    var options = overrides[id] ?? Options()
+    options.limited = enabled
+    overrides[id] = options
+    record.limited = enabled
+    invalidateFold(record)
+    geometryRevision += 1
+    relayout(record)
+  }
+
+  private func invalidateFold(_ record: CodeBlockRecord) {
+    let previous = record.hiddenRange
+    record.hiddenRange = nil
+    record.foldCandidate = nil
+    if let previous {
+      hiddenRanges.removeAll { $0 == previous }
+      textView?.layoutManager?.invalidateGlyphs(
+        forCharacterRange: previous, changeInLength: 0, actualCharacterRange: nil)
+    }
+  }
+
+  /// Search, keyboard selection and reading restoration reveal the original canonical range.
+  @discardableResult
+  func revealHiddenContent(in selection: NSRange) -> Bool {
+    let hidden = records.filter { record in
+      guard let range = record.hiddenRange else { return false }
+      return selection.length == 0
+        ? NSLocationInRange(selection.location, range)
+        : NSIntersectionRange(selection, range).length > 0
+    }
+    for record in hidden { toggleLimit(record.id, enabled: false) }
+    return !hidden.isEmpty
   }
 
   func setScroll(_ id: String, fraction: Double) {
@@ -521,6 +682,7 @@ final class ReaderOverflowTable: NSTextTable {
 
   func revealSelection(_ selection: NSRange, previous: NSRange) {
     guard let text = textView, let layout = text.layoutManager else { return }
+    if revealHiddenContent(in: selection) { text.scrollRangeToVisible(selection) }
     let active =
       selection.location != previous.location ? selection.location : NSMaxRange(selection)
     guard active < text.string.utf16.count, let record = record(at: active), !record.wrap else {
@@ -530,7 +692,7 @@ final class ReaderOverflowTable: NSTextTable {
     let fragment = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
     let x = fragment.minX + layout.location(forGlyphAt: glyph).x
     let left = record.indent + record.gutter
-    let right = containerWidth - 8
+    let right = containerWidth - 16
     if x < left {
       setOffset(record, value: record.offset - (left - x))
     } else if x > right {
@@ -556,14 +718,20 @@ final class ReaderOverflowTable: NSTextTable {
 
   private func setOffset(_ record: CodeBlockRecord, value: CGFloat) {
     record.offset = max(0, min(maximumOffset(record), value))
-    var options = overrides[record.id] ?? (nil, nil, 0)
+    var options = overrides[record.id] ?? Options()
     options.offset = record.offset
     overrides[record.id] = options
     relayout(record)
   }
 
   private func maximumOffset(_ record: CodeBlockRecord) -> CGFloat {
-    max(0, record.contentWidth - max(1, containerWidth - record.indent - record.gutter))
+    max(
+      0,
+      record.contentWidth
+        - max(
+          1,
+          containerWidth - record.indent - record.gutter
+            - (record.kind == .code ? 16 : 0)))
   }
 
   private func relayout(_ record: CodeBlockRecord) {
@@ -588,14 +756,9 @@ final class ReaderOverflowTable: NSTextTable {
       ofSize: min(12, currentPreferences.codeSize * currentPreferences.zoom * 0.85),
       weight: .regular)
     let attrs: [NSAttributedString.Key: Any] = [
-      .font: font, .foregroundColor: NSColor.secondaryLabelColor,
+      .font: font
     ]
     for record in records where record.numbers && record.frame.intersects(dirty) {
-      let box = CGRect(
-        x: record.frame.minX, y: record.frame.minY, width: record.gutter - 5,
-        height: record.frame.height)
-      NSColor.controlBackgroundColor.setFill()
-      box.fill()
       let visibleGlyphs = layout.glyphRange(
         forBoundingRect: dirty.offsetBy(dx: -origin.x, dy: -origin.y), in: container)
       let visibleCharacters = layout.characterRange(
@@ -603,14 +766,30 @@ final class ReaderOverflowTable: NSTextTable {
       for (index, character) in record.lineStarts.enumerated()
       where character >= visibleCharacters.location && character <= NSMaxRange(visibleCharacters) {
         guard character < text.string.utf16.count else { continue }
+        if let hidden = record.hiddenRange, NSLocationInRange(character, hidden) { continue }
         let glyph = layout.glyphIndexForCharacter(at: character)
         let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-        let label = NSAttributedString(string: String(index + 1), attributes: attrs)
+        var numberAttributes = attrs
+        numberAttributes[.foregroundColor] = record.controlColor.withAlphaComponent(0.45)
+        let label = NSAttributedString(string: String(index + 1), attributes: numberAttributes)
         label.draw(
           at: CGPoint(
             x: record.frame.minX + record.gutter - label.size().width - 11,
             y: origin.y + line.minY + layout.location(forGlyphAt: glyph).y - font.ascender))
       }
+    }
+  }
+
+  func drawPanels() {
+    guard let text = textView else { return }
+    for record in records
+    where record.kind == .code && record.panelFrame.intersects(text.visibleRect) {
+      let path = NSBezierPath(roundedRect: record.panelFrame, xRadius: 10, yRadius: 10)
+      record.surfaceColor.setFill()
+      path.fill()
+      record.controlColor.withAlphaComponent(0.10).setStroke()
+      path.lineWidth = 0.7
+      path.stroke()
     }
   }
 }
@@ -620,6 +799,13 @@ final class ReaderOverflowTable: NSTextTable {
   override func accessibilityRole() -> NSAccessibility.Role? { checkbox ? .checkBox : .button }
   override func accessibilityValue() -> Any? { checkbox ? NSNumber(value: state.rawValue) : nil }
   override func isAccessibilityEnabled() -> Bool { isEnabled }
+  override func draw(_ dirtyRect: NSRect) {
+    if isHighlighted || (checkbox && state == .on) {
+      (contentTintColor ?? .labelColor).withAlphaComponent(isHighlighted ? 0.18 : 0.10).setFill()
+      NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 5, yRadius: 5).fill()
+    }
+    super.draw(dirtyRect)
+  }
   override func accessibilityPerformPress() -> Bool {
     guard isEnabled else { return false }
     performClick(nil)
@@ -636,110 +822,145 @@ final class ReaderOverflowTable: NSTextTable {
   private let recordID: String
   private let original: String
   private weak var owner: CodeBlockController?
+  private let languageIcon = NSImageView()
   private let language = NSTextField(labelWithString: "")
   private let copyButton = CodeControlButton()
-  private let wrapButton = CodeControlButton(checkboxWithTitle: "", target: nil, action: nil)
-  private let numbersButton = CodeControlButton(checkboxWithTitle: "", target: nil, action: nil)
-  private let optionsButton = CodeControlButton(title: "…", target: nil, action: nil)
+  private let wrapButton = CodeControlButton()
+  private let numbersButton = CodeControlButton()
+  private let heightButton = CodeControlButton()
+  private let optionsButton = CodeControlButton()
   private var feedbackTask: Task<Void, Never>?
+  private var limited = false
 
   init(record: CodeBlockRecord, owner: CodeBlockController) {
     recordID = record.id
     original = record.original
     self.owner = owner
     super.init(frame: .zero)
-    wantsLayer = true
-    layer?.cornerRadius = 5
+    identifier = NSUserInterfaceItemIdentifier("code-block-header")
     language.font = .systemFont(ofSize: 11, weight: .medium)
     language.lineBreakMode = .byTruncatingTail
     language.setAccessibilityRole(.staticText)
+    languageIcon.image = NSImage(
+      systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: nil)
+    languageIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+    languageIcon.setAccessibilityElement(false)
+    addSubview(languageIcon)
     wrapButton.checkbox = true
     numbersButton.checkbox = true
-    copyButton.bezelStyle = .inline
-    copyButton.target = self
-    copyButton.action = #selector(copyCode)
-    wrapButton.target = self
-    wrapButton.action = #selector(toggleWrap)
-    numbersButton.target = self
-    numbersButton.action = #selector(toggleNumbers)
-    optionsButton.bezelStyle = .inline
-    optionsButton.target = self
-    optionsButton.action = #selector(showOptions)
-    for view in [language, copyButton, wrapButton, numbersButton, optionsButton] {
-      view.setAccessibilityElement(true)
-      addSubview(view)
+    wrapButton.setButtonType(.pushOnPushOff)
+    numbersButton.setButtonType(.pushOnPushOff)
+    for (button, identifier, symbol, action) in [
+      (copyButton, "code-copy", "doc.on.doc", #selector(copyCode)),
+      (wrapButton, "code-wrap", "arrow.turn.down.left", #selector(toggleWrap)),
+      (numbersButton, "code-lines", "list.number", #selector(toggleNumbers)),
+      (heightButton, "code-height", "arrow.down.right.and.arrow.up.left", #selector(toggleHeight)),
+      (optionsButton, "code-options", "ellipsis", #selector(showOptions)),
+    ] {
+      button.identifier = NSUserInterfaceItemIdentifier(identifier)
+      button.bezelStyle = .inline
+      button.isBordered = false
+      button.imagePosition = .imageOnly
+      button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+      button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+      button.target = self
+      button.action = action
+      button.setAccessibilityElement(true)
+      addSubview(button)
     }
+    language.setAccessibilityElement(true)
+    addSubview(language)
     refresh(record)
   }
   required init?(coder: NSCoder) { nil }
   override var isFlipped: Bool { true }
 
   func refresh(_ record: CodeBlockRecord) {
+    limited = record.limited
     language.stringValue = record.language
     language.setAccessibilityValue(record.language)
     language.setAccessibilityLabel(localized("Code language") + ": " + record.language)
     if feedbackTask == nil { copyButton.title = localized("Copy") }
     copyButton.setAccessibilityLabel(localized("Copy code"))
+    copyButton.toolTip = localized("Copy code")
     wrapButton.title = localized("Wrap")
     wrapButton.state = record.wrap ? .on : .off
     wrapButton.setAccessibilityLabel(localized("Wrap this code block"))
+    wrapButton.toolTip = localized("Wrap this code block")
     numbersButton.title = localized("Lines")
     numbersButton.state = record.numbers ? .on : .off
     numbersButton.setAccessibilityLabel(localized("Line numbers for this code block"))
-    optionsButton.setAccessibilityLabel(localized("Wrap") + ", " + localized("Lines"))
-    updateBackground()
-    needsLayout = true
-  }
-
-  override func viewDidChangeEffectiveAppearance() {
-    super.viewDidChangeEffectiveAppearance()
-    updateBackground()
-  }
-
-  private func updateBackground() {
-    effectiveAppearance.performAsCurrentDrawingAppearance {
-      layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+    numbersButton.toolTip = localized("Line numbers for this code block")
+    heightButton.title = localized(record.limited ? "Show all code" : "Limit code height")
+    heightButton.setAccessibilityLabel(heightButton.title)
+    heightButton.isEnabled = record.foldCandidate != nil || record.hiddenRange != nil
+    heightButton.toolTip =
+      heightButton.isEnabled ? heightButton.title : localized("All code is already visible")
+    heightButton.image = NSImage(
+      systemSymbolName: record.limited
+        ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left",
+      accessibilityDescription: nil)
+    optionsButton.title = "…"
+    optionsButton.setAccessibilityLabel(
+      localized("Wrap") + ", " + localized("Lines") + ", " + heightButton.title)
+    optionsButton.toolTip = optionsButton.accessibilityLabel()
+    language.textColor = record.controlColor
+    languageIcon.contentTintColor = record.controlColor
+    for button in [copyButton, wrapButton, numbersButton, heightButton, optionsButton] {
+      // AppKit can change imagePosition when a localized title is assigned. Keep those
+      // native titles for accessibility, but apply the icon-only layout after every refresh.
+      button.imagePosition = .imageOnly
+      button.contentTintColor = record.controlColor
+      button.needsDisplay = true
     }
+    needsLayout = true
   }
 
   override func layout() {
     super.layout()
-    let buttonWidth = max(53, copyButton.fittingSize.width + 10)
-    let numbersWidth = max(64, numbersButton.fittingSize.width + 6)
-    let wrapWidth = max(64, wrapButton.fittingSize.width + 6)
-    copyButton.frame = CGRect(
-      x: max(0, bounds.width - buttonWidth - 5), y: 2, width: buttonWidth, height: 24)
-    let compact = bounds.width < max(240, buttonWidth + numbersWidth + wrapWidth + 65)
+    let compact = bounds.width < 176
+    let tiny = bounds.width < 112
     wrapButton.isHidden = compact
     numbersButton.isHidden = compact
+    heightButton.isHidden = compact
     optionsButton.isHidden = !compact
+    languageIcon.isHidden = tiny
+    language.isHidden = tiny
+    let inset: CGFloat = tiny ? 4 : 10
+    copyButton.frame = CGRect(x: max(inset, bounds.width - inset - 26), y: 5, width: 26, height: 26)
+    let firstControl: CGFloat
     if compact {
       optionsButton.frame = CGRect(
-        x: max(0, copyButton.frame.minX - 34), y: 2, width: 28, height: 24)
-      language.frame = CGRect(x: 8, y: 7, width: max(0, optionsButton.frame.minX - 13), height: 18)
-      return
+        x: max(inset, copyButton.frame.minX - 30), y: 5, width: 26, height: 26)
+      firstControl = optionsButton.frame.minX
+    } else {
+      heightButton.frame = CGRect(x: copyButton.frame.minX - 30, y: 5, width: 26, height: 26)
+      numbersButton.frame = CGRect(x: heightButton.frame.minX - 30, y: 5, width: 26, height: 26)
+      wrapButton.frame = CGRect(x: numbersButton.frame.minX - 30, y: 5, width: 26, height: 26)
+      firstControl = wrapButton.frame.minX
     }
-    numbersButton.frame = CGRect(
-      x: max(0, copyButton.frame.minX - numbersWidth), y: 3, width: numbersWidth, height: 22)
-    wrapButton.frame = CGRect(
-      x: max(0, numbersButton.frame.minX - wrapWidth), y: 3, width: wrapWidth, height: 22)
-    language.frame = CGRect(x: 8, y: 7, width: max(15, wrapButton.frame.minX - 13), height: 18)
+    languageIcon.frame = CGRect(x: 12, y: 11, width: 14, height: 14)
+    language.frame = CGRect(x: 33, y: 10, width: max(0, firstControl - 39), height: 17)
   }
 
   @objc private func copyCode() {
     NSPasteboard.general.clearContents()
     guard NSPasteboard.general.setString(original, forType: .string) else { return }
+    copyButton.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
     copyButton.title = localized("Copied")
-    needsLayout = true
+    copyButton.imagePosition = .imageOnly
     copyButton.setAccessibilityLabel(localized("Code copied"))
+    copyButton.toolTip = localized("Code copied")
     NSAccessibility.post(element: copyButton, notification: .valueChanged)
     feedbackTask?.cancel()
     feedbackTask = Task { [weak self] in
       do { try await Task.sleep(for: .seconds(1.5)) } catch { return }
       guard let self else { return }
+      copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
       copyButton.title = localized("Copy")
-      needsLayout = true
+      copyButton.imagePosition = .imageOnly
       copyButton.setAccessibilityLabel(localized("Copy code"))
+      copyButton.toolTip = localized("Copy code")
       feedbackTask = nil
     }
   }
@@ -747,21 +968,27 @@ final class ReaderOverflowTable: NSTextTable {
   @objc private func toggleNumbers() {
     owner?.toggleNumbers(recordID, enabled: numbersButton.state == .on)
   }
+  @objc private func toggleHeight() { owner?.toggleLimit(recordID, enabled: !limited) }
   @objc private func showOptions() {
     let menu = NSMenu()
-    let wrap = NSMenuItem(
-      title: localized("Wrap this code block"), action: #selector(toggleWrapFromMenu),
-      keyEquivalent: "")
-    wrap.target = self
-    wrap.state = wrapButton.state
-    let numbers = NSMenuItem(
-      title: localized("Line numbers for this code block"),
-      action: #selector(toggleNumbersFromMenu),
-      keyEquivalent: "")
-    numbers.target = self
-    numbers.state = numbersButton.state
-    menu.addItem(wrap)
-    menu.addItem(numbers)
+    for (title, action, state, enabled) in [
+      (localized("Wrap this code block"), #selector(toggleWrapFromMenu), wrapButton.state, true),
+      (
+        localized("Line numbers for this code block"), #selector(toggleNumbersFromMenu),
+        numbersButton.state, true
+      ),
+      (
+        heightButton.title, #selector(toggleHeight), NSControl.StateValue.off,
+        heightButton.isEnabled
+      ),
+    ] {
+      let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+      item.target = self
+      item.state = state
+      item.isEnabled = enabled
+      menu.addItem(item)
+    }
+    menu.autoenablesItems = false
     menu.popUp(
       positioning: nil, at: NSPoint(x: optionsButton.frame.minX, y: optionsButton.frame.maxY),
       in: self)
@@ -781,7 +1008,7 @@ final class ReaderOverflowTable: NSTextTable {
     self.recordID = recordID
     self.owner = owner
     super.init(frame: CGRect(x: 0, y: 0, width: 300, height: 14))
-    scrollerStyle = .legacy
+    scrollerStyle = table ? .legacy : .overlay
     controlSize = .small
     isEnabled = true
     target = self

@@ -1,5 +1,9 @@
 # Release performance evidence
 
+These measurements describe the V1 baseline at commit `7cb3abd`, before the
+subsequent integrated code-panel and optional height-limit change. They have not
+been rerun for that UI follow-up.
+
 Measurements use original public fixtures on Apple M3 (Mac15,3), 8 logical CPUs,
 16 GiB RAM, macOS 27.2 (26B123). The optimized Universal Release app is copied
 from the unsigned archive and ad-hoc signed with development entitlements for
