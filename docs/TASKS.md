@@ -86,3 +86,42 @@ Performance numbers remain attributed to the preceding V1 baseline.
 Astra independently verified the final logs and diff and approved integrated
 acceptance; no follow-up blocker remained. Existing external release gates are
 unchanged.
+
+## Real-content minimap follow-up (2026-10-31)
+
+The owner requested a VS Code-like miniature instead of the current block-kind
+bars. Astra (`gpt-6-astra`, high) defines/reviews geometry, cache and lifecycle
+invariants. Sol (`gpt-6.1-sol`, high) owns the native minimap, its reader/code-layout
+integration and meaningful tests. Root owns build integration, documentation,
+actual UI verification and bounded performance checks.
+
+The preview must use actual glyphs, colors, tables and images from the existing
+native layout, with uniform scaling and a virtual vertical window for long
+documents. Raster tiles are bounded and cached; no second live document renderer
+or full-height bitmap. Click, viewport dragging and accessibility navigation
+must map to the same layout. Ordinary scrolling must not rescan/re-render the
+whole document. Content/appearance/layout changes invalidate tiles; hiding the
+minimap or closing the reader cancels work and releases its cache. Private user
+documents/screenshots are not test artifacts or repository content.
+
+Implementation and unlocked integration checks are complete. The final full
+app-hosted gate passed **60 tests / 13 suites in 11.119 seconds**
+(`build-app-minimap-accepted.log`, TEST SUCCEEDED, wrapper exit 0). Focused
+minimap and CodeBlockControls runs previously passed 7/7 and 10/10. The final
+suite adds strict clipping regression coverage after actual UI revealed painting
+outside the native preview bounds. Selection, clipping and focus assertions were
+retained.
+
+The final Universal archive succeeded (`build-release-minimap-final.log`); six
+Mach-O binaries retain both architectures and local nested signatures verify.
+Both `build/Review/MarkUp.app` and `build/MinimapReview/MarkUp.app` are refreshed.
+Actual short/long-document navigation, real glyph/syntax/table/image content,
+light/dark appearance, zoom, hide/re-enable and final no-bleed drawing were checked.
+Preferences are restored to English/System/100%. The current 31.176-second idle
+observation measured 1.347% CPU and 103.74 MiB physical footprint; the <1% CPU
+target remains an explicit performance exception, not a claimed pass.
+
+Astra independently approved the final integrated handoff, including source,
+strict test/log evidence and the explicitly qualified performance observation.
+No implementation blocker remains. No remote push or publication occurred.
+Existing external release gates remain unchanged.

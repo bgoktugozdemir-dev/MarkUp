@@ -29,7 +29,7 @@ import SwiftUI
   var renderedRevision = 0
   var viewport = CGRect.zero
   var documentHeight = 1.0
-  var layoutBlocks: [(id: String, kind: MarkdownBlockKind, rect: CGRect)] = []
+  let minimap = MinimapTiles()
   weak var textView: NSTextView?
   let annotationUndoManager = UndoManager()
   let grants = AccessGrants()
@@ -159,6 +159,7 @@ import SwiftUI
     annotationHistory.close()
     watcher.close()
     grants.close()
+    minimap.disable()
     (textView as? ReaderTextView)?.releaseDocumentResources()
     textView = nil
     readingLocation = nil
@@ -166,7 +167,6 @@ import SwiftUI
     document = nil
     rendered = nil
     tokens = [:]
-    layoutBlocks = []
     annotations = []
     resolvedAnnotations = [:]
     unresolved = []

@@ -333,7 +333,7 @@ struct ReaderView: View {
         .padding(10).background(.orange.opacity(0.12)).accessibilityElement(children: .combine)
       }
       HStack(spacing: 0) {
-        if settings.value.showMinimap { MinimapView(session: session) }
+        if settings.value.showMinimap { MinimapView(session: session).frame(width: 112) }
         if settings.value.showOutline { outline }
         if session.rendered != nil {
           NativeReader(session: session, preferences: settings.value)

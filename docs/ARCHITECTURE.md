@@ -22,7 +22,9 @@ Wide tables use screen-owned `NSTextTable` and cell copies with absolute widths;
 
 AppKit objects, attributed strings containing fonts/colors/attachments, text storage, layout managers and views remain `@MainActor`. Legacy nonisolated TextKit callbacks assert the main thread before reading their weak UI-owner links; background text layout is disabled. Parsing/tokenization and Foundation-only transforms run in cancellable worker tasks. Each load produces a monotonically increasing generation; publication requires the current document, generation and styling revision. Cancellation is cooperative and stale output must also be rejected. Theme-only changes reuse tokens. A closed document invalidates publication, cancels work, closes watchers and balances every successful security-scope access.
 
-The minimap consumes bounded cached block geometry from the actual reader layout. It does not parse or lay out a second document. Scroll updates move only the viewport marker. Content, zoom, width, wrapping and image dimensions invalidate geometry. Disabled means no minimap drawing work.
+The minimap draws miniature glyphs, syntax colors, table decorations and loaded images from the reader's existing native layout. It does not parse or lay out a second document. Uniform scaling preserves the content's proportions; when the miniature is taller than its viewport, its virtual window follows document progress instead of squeezing every line into a fixed height. Clicks and viewport dragging use this same coordinate mapping.
+
+Only visible/nearby raster tiles are produced, with a bounded cache rather than a full-document bitmap. Ordinary scrolling reuses tiles and updates their placement plus the viewport marker. Content, typography, appearance, images, annotations and code layout changes invalidate the visual generation. Disabling the minimap or closing the reader cancels pending work and releases cached images; delayed work must revalidate its generation and weak reader ownership before publishing.
 
 ## File and resource trust boundary
 

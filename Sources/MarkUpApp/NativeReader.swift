@@ -229,7 +229,6 @@ struct NativeReader: NSViewRepresentable {
       revision = -1
       hasRestored = false
       wasClosed = false
-      geometrySignature = ""
     }
     func bindWindow(_ window: NSWindow?) {
       guard window !== observedWindow else { return }
@@ -294,24 +293,9 @@ struct NativeReader: NSViewRepresentable {
       (text as? ReaderTextView)?.codeControls?.updateFrames()
       session.viewport = text.visibleRect
       session.documentHeight = max(1, text.bounds.height)
-      guard AppSettings.shared.value.showMinimap, let layout = text.layoutManager,
-        let container = text.textContainer
-      else { return }
-      // Cache block geometry only when layout extent/revision changes. Scroll updates viewport alone.
-      let signature = "\(revision):\(text.bounds.width):\(text.bounds.height)"
-      guard signature != geometrySignature else { return }
-      geometrySignature = signature
-      session.layoutBlocks = blocks.compactMap { block in
-        guard block.range.length > 0, NSMaxRange(block.range) <= text.string.utf16.count else {
-          return nil
-        }
-        let glyphs = layout.glyphRange(forCharacterRange: block.range, actualCharacterRange: nil)
-        var rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
-        rect.origin.y += text.textContainerInset.height
-        return (block.id, block.kind, rect)
-      }
+      session.minimap.update(
+        source: text, revision: revision, enabled: AppSettings.shared.value.showMinimap)
     }
-    private var geometrySignature = ""
 
     private func cancelInitialRestore() {
       restoreGeneration += 1
@@ -398,6 +382,30 @@ extension Array where Element == RenderedBlock {
   var codeControls: CodeBlockController?
   var geometryChanged: (() -> Void)?
   var imagePreviewController: ImagePreviewController?
+  // NSLayoutManager paints selection backgrounds separately from temporary attributes.
+  // During a synchronous minimap draw, project an empty selection to its public queries;
+  // the real stored selection, setters, notifications and undo history stay untouched.
+  override var selectedRanges: [NSValue] {
+    get {
+      if codeControls?.minimapSourceRect != nil {
+        return [NSValue(range: NSRange(location: 0, length: 0))]
+      }
+      return super.selectedRanges
+    }
+    set { super.selectedRanges = newValue }
+  }
+  override func selectedRange() -> NSRange {
+    if codeControls?.minimapSourceRect != nil { return NSRange(location: 0, length: 0) }
+    return super.selectedRange()
+  }
+  override func viewDidChangeEffectiveAppearance() {
+    super.viewDidChangeEffectiveAppearance()
+    geometryChanged?()
+  }
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties()
+    geometryChanged?()
+  }
   func releaseDocumentResources() {
     if let responder = window?.firstResponder as? NSView,
       responder === self || responder.isDescendant(of: self)
@@ -520,59 +528,6 @@ extension Array where Element == RenderedBlock {
   @objc private func highlightGreen() { session?.addAnnotation(.highlightGreen) }
   @objc private func highlightBlue() { session?.addAnnotation(.highlightBlue) }
   @objc private func underlineSelection() { session?.addAnnotation(.underline) }
-}
-
-struct MinimapView: View {
-  let session: ReaderSession
-  var body: some View {
-    GeometryReader { geometry in
-      Canvas { context, size in
-        let scale = size.height / max(1, session.documentHeight)
-        for block in session.layoutBlocks {
-          let width: CGFloat =
-            switch block.kind {
-            case .heading: 44
-            case .code, .table: 52
-            default: 32
-            }
-          let color: Color =
-            switch block.kind {
-            case .heading: .primary
-            case .code: .blue
-            case .table: .orange
-            default: .secondary
-            }
-          let rect = CGRect(
-            x: 7, y: block.rect.minY * scale, width: width,
-            height: max(1, block.rect.height * scale))
-          context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(color.opacity(0.25)))
-        }
-        let marker = CGRect(
-          x: 2, y: session.viewport.minY * scale, width: size.width - 4,
-          height: max(8, session.viewport.height * scale))
-        context.fill(
-          Path(roundedRect: marker, cornerRadius: 4), with: .color(.accentColor.opacity(0.12)))
-        context.stroke(
-          Path(roundedRect: marker, cornerRadius: 4), with: .color(.accentColor), lineWidth: 1)
-      }
-      .contentShape(Rectangle())
-      .gesture(
-        DragGesture(minimumDistance: 0).onChanged { value in
-          let y =
-            value.location.y / max(1, geometry.size.height) * session.documentHeight - session
-            .viewport.height / 2
-          session.textView?.scroll(CGPoint(x: 0, y: max(0, y)))
-        }
-      )
-      .accessibilityElement()
-      .accessibilityLabel(localized("Document minimap"))
-      .accessibilityValue("\(Int(session.viewport.minY / max(1, session.documentHeight) * 100))%")
-      .accessibilityAdjustableAction { direction in
-        let delta = direction == .increment ? session.viewport.height : -session.viewport.height
-        session.textView?.scroll(CGPoint(x: 0, y: max(0, session.viewport.minY + delta)))
-      }
-    }.frame(width: 64).background(.quaternary.opacity(0.25))
-  }
 }
 
 extension NSColor {

@@ -32,7 +32,7 @@ xcodebuild -project MarkUp.xcodeproj -scheme MarkUp \
 
 - Open `.md` and `.markdown` files from Finder, the Open command, or drag-and-drop. Each document has its own window; macOS can merge windows into tabs.
 - Read CommonMark/GFM prose, headings, nested lists, tables, tasks, footnotes, and all five GitHub alerts.
-- Select native text across the document. Search, heading outline, semantic reading positions, and a left minimap support navigation.
+- Select native text across the document. Search, heading outline, semantic reading positions, and a left minimap of the actual rendered content support navigation. Click its preview or drag the viewport to move through the document.
 - Choose body, heading, and code fonts; adjust size, spacing, width, and zoom. Choose six independent code-theme families with nine palettes.
 - Highlight or underline text without changing source bytes. Durable annotations are stored in Application Support; ambiguous marks remain available for recovery.
 - Double-click a loaded image to inspect it in a resizable native preview.

@@ -83,7 +83,8 @@ struct NativeReaderLayoutTests {
       fixture.window.close()  // No explicit session.close(): exercise the production window hook.
       try await fixture.waitUntil { fixture.session.isClosed && fixture.text == nil }
       #expect(fixture.session.rendered == nil && fixture.session.document == nil)
-      #expect(fixture.session.source.isEmpty && fixture.session.layoutBlocks.isEmpty)
+      #expect(fixture.session.source.isEmpty)
+      #expect(fixture.session.minimap.cachedBytes == 0 && fixture.session.minimap.source == nil)
       #expect(fixture.session.tokens.isEmpty)
       let stored = try #require(UserDefaults.standard.dictionary(forKey: key))
       #expect(stored["block"] as? String != nil)

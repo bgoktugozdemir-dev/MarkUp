@@ -1,8 +1,9 @@
 # Release performance evidence
 
-These measurements describe the V1 baseline at commit `7cb3abd`, before the
-subsequent integrated code-panel and optional height-limit change. They have not
-been rerun for that UI follow-up.
+The baseline sections describe V1 at commit `7cb3abd`, before the integrated
+code-panel and real-content minimap changes. The final section records a separate
+current minimap observation; earlier startup/reload/stress results have not been
+rerun and are not measurements of the current binary.
 
 Measurements use original public fixtures on Apple M3 (Mac15,3), 8 logical CPUs,
 16 GiB RAM, macOS 27.2 (26B123). The optimized Universal Release app is copied
@@ -198,3 +199,28 @@ approximate target with one slightly slower final sample. Warm opening, file
 refresh and the final idle CPU target are not met. These are measured exceptions
 after profiling and targeted improvements; no feature, source content, annotation
 safety or validation assertion was dropped to improve numbers.
+
+
+## Real-content minimap follow-up (2026-10-31)
+
+Current archive: `build-release-minimap-final.log`; app: `build/Review/MarkUp.app`.
+This optimized sandboxed Universal build includes the final bounds-clipping fix.
+The original 145,664-byte, approximately 2,500-line `long-reading.md` was open,
+with loaded local images, minimap enabled, English/System preferences and 100%
+zoom. Actual navigation reached top, middle and end; the final idle observation
+was taken at the top after interaction settled. No build, test or UI automation
+ran during the measurement.
+
+`artifacts/minimap-final-idle.json` contains 30 samples over **31.176 seconds**:
+**1.347% CPU** of one core, **103.74 MiB physical footprint**, **121.53 MiB RSS**
+and **183.13 MiB lifetime physical peak**. This is one representative-document
+observation after UI navigation, not a repeated stress benchmark or a controlled
+comparison with V1. The <1% idle target is still missed in this interval; its cause
+is not established. Historical startup/reload/stress exceptions remain above.
+
+The native minimap tests independently enforce an **8 MiB raster allocation
+ceiling**, including two working bitmap buffers, and verify cache reuse and
+release. That bound is specific to additional miniature bitmap storage, not total
+app memory. All 60 current app-hosted tests passed, including exact selection
+preservation and zero paint outside the preview bounds. Actual short/long and
+light/dark UI checks are recorded in `VERIFICATION.md`.

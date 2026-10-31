@@ -84,6 +84,35 @@ final class ReaderOverflowTable: NSTextTable {
   // Read only from AppKit callbacks after the main-thread assertion below.
   nonisolated(unsafe) weak var codeControls: CodeBlockController?
 
+  /// Reuse the screen's glyphs, attachments and stored attributes without drawing native
+  /// views, insertion points, spelling marks or transient selection colors.
+  func drawMinimap(in region: CGRect, textOrigin: CGPoint) {
+    let controls = codeControls
+    let previous = controls?.minimapSourceRect
+    controls?.minimapSourceRect = region
+    defer { controls?.minimapSourceRect = previous }
+    guard let container = textContainers.first else { return }
+    codeControls?.drawPanels(in: region)
+    let glyphs = glyphRange(
+      forBoundingRect: region.offsetBy(dx: -textOrigin.x, dy: -textOrigin.y), in: container)
+    guard glyphs.length > 0 else { return }
+    drawBackground(forGlyphRange: glyphs, at: textOrigin)
+    drawGlyphs(forGlyphRange: glyphs, at: textOrigin)
+    codeControls?.drawLineNumbers(in: region)
+  }
+
+  nonisolated func layoutManager(
+    _ layoutManager: NSLayoutManager,
+    shouldUseTemporaryAttributes attrs: [NSAttributedString.Key: Any],
+    forDrawingToScreen toScreen: Bool, atCharacterIndex charIndex: Int,
+    effectiveRange effectiveCharRange: NSRangePointer?
+  ) -> [NSAttributedString.Key: Any]? {
+    precondition(Thread.isMainThread, "Reader drawing is main-thread owned")
+    let controls = codeControls
+    let preview = MainActor.assumeIsolated { controls?.minimapSourceRect != nil }
+    return !preview && toScreen ? attrs : nil
+  }
+
   override init() {
     super.init()
     delegate = self
@@ -141,7 +170,9 @@ final class ReaderOverflowTable: NSTextTable {
   override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
     precondition(Thread.isMainThread, "Reader drawing is main-thread owned")
     let controls = codeControls
-    MainActor.assumeIsolated { controls?.drawPanels() }
+    MainActor.assumeIsolated {
+      if controls?.minimapSourceRect == nil { controls?.drawPanels() }
+    }
     let segments = drawingSegments(glyphsToShow, origin: origin)
     for segment in segments {
       NSGraphicsContext.saveGraphicsState()
@@ -156,16 +187,16 @@ final class ReaderOverflowTable: NSTextTable {
   )] {
     precondition(Thread.isMainThread, "Reader layout is main-thread owned")
     let controls = codeControls
+    let characters = characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
     let snapshot = MainActor.assumeIsolated {
       (
-        controls?.records.map {
+        controls?.records(intersecting: characters).map {
           ($0.range, $0.indent, $0.gutter, $0.kind == .code ? CGFloat(16) : 0)
         } ?? [],
         controls?.containerWidth ?? 1, controls?.documentHeight ?? 1
       )
     }
     guard !snapshot.0.isEmpty else { return [(glyphs, nil)] }
-    let characters = characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
     var result: [(range: NSRange, clip: CGRect?)] = []
     var cursor = glyphs.location
     for record in snapshot.0 where NSIntersectionRange(characters, record.0).length > 0 {
@@ -262,6 +293,9 @@ final class ReaderOverflowTable: NSTextTable {
 }
 
 @MainActor final class CodeBlockController {
+  // Scoped by CodeLayoutManager.drawMinimap; Objective-C callbacks read through the
+  // existing weak actor-owned controller link after asserting the main thread.
+  var minimapSourceRect: CGRect?
   private struct Options {
     var wrap: Bool?
     var numbers: Bool?
@@ -276,7 +310,10 @@ final class ReaderOverflowTable: NSTextTable {
   private var scrollers: [String: CodeBlockScroller] = [:]
   private var currentPreferences = ReaderPreferences()
   private var geometryRevision = 0
+  private var panelIndexRevision = -1
+  private var panelRecords: [CodeBlockRecord] = []
   private(set) var geometryMeasurementCount = 0
+  private(set) var previewRevision = 0
   var containerWidth: CGFloat { textView?.textContainer?.size.width ?? 1 }
   var documentHeight: CGFloat { textView?.bounds.height ?? 1 }
   private(set) var hiddenRanges: [NSRange] = []
@@ -310,6 +347,25 @@ final class ReaderOverflowTable: NSTextTable {
     return record
   }
 
+  /// Records are sorted, nonoverlapping text ranges. A tile/dirty glyph slice needs only
+  /// the neighboring code/table records, even in documents with thousands of fences.
+  func records(intersecting range: NSRange) -> ArraySlice<CodeBlockRecord> {
+    guard range.length > 0 else { return records[0..<0] }
+    var lower = 0
+    var upper = records.count
+    while lower < upper {
+      let middle = (lower + upper) / 2
+      if NSMaxRange(records[middle].range) <= range.location {
+        lower = middle + 1
+      } else {
+        upper = middle
+      }
+    }
+    let start = lower
+    while lower < records.count, records[lower].range.location < NSMaxRange(range) { lower += 1 }
+    return records[start..<lower]
+  }
+
   /// Adds layout attributes only. The character string and source-copy payload never change.
   func prepare(
     _ display: NSMutableAttributedString, rendered: RenderedDocument,
@@ -317,6 +373,9 @@ final class ReaderOverflowTable: NSTextTable {
   ) {
     currentPreferences = preferences
     geometryRevision += 1
+    previewRevision += 1
+    panelRecords = []
+    panelIndexRevision = -1
     hiddenRanges = []
     func flatten(_ blocks: [MarkdownBlock]) -> [MarkdownBlock] {
       blocks.flatMap { [$0] + flatten($0.children) }
@@ -444,6 +503,7 @@ final class ReaderOverflowTable: NSTextTable {
 
   func containerDidResize() {
     geometryRevision += 1
+    previewRevision += 1
     guard let storage = textView?.textStorage, let layout = textView?.layoutManager else { return }
     for record in records where record.kind == .code { invalidateFold(record) }
     for record in records where record.kind == .table {
@@ -582,6 +642,7 @@ final class ReaderOverflowTable: NSTextTable {
       }
     }
     if !folds.isEmpty {
+      previewRevision += 1
       hiddenRanges.append(contentsOf: folds.compactMap(\.hiddenRange))
       for record in folds {
         if let range = record.hiddenRange {
@@ -597,6 +658,7 @@ final class ReaderOverflowTable: NSTextTable {
       return
     }
     if !clamped.isEmpty {
+      previewRevision += 1
       for record in clamped {
         layout.invalidateLayout(forCharacterRange: record.range, actualCharacterRange: nil)
       }
@@ -611,6 +673,12 @@ final class ReaderOverflowTable: NSTextTable {
     }
     for id in scrollers.keys.filter({ !visibleIDs.contains($0) }) {
       scrollers.removeValue(forKey: id)?.removeFromSuperview()
+    }
+    if panelIndexRevision != geometryRevision {
+      panelRecords = records.filter { $0.kind == .code }.sorted {
+        $0.panelFrame.minY < $1.panelFrame.minY
+      }
+      panelIndexRevision = geometryRevision
     }
   }
 
@@ -736,6 +804,7 @@ final class ReaderOverflowTable: NSTextTable {
 
   private func relayout(_ record: CodeBlockRecord) {
     guard let text = textView, let layout = text.layoutManager else { return }
+    previewRevision += 1
     let visibleY = text.visibleRect.minY
     layout.invalidateLayout(forCharacterRange: record.range, actualCharacterRange: nil)
     layout.invalidateDisplay(forCharacterRange: record.range)
@@ -758,13 +827,25 @@ final class ReaderOverflowTable: NSTextTable {
     let attrs: [NSAttributedString.Key: Any] = [
       .font: font
     ]
-    for record in records where record.numbers && record.frame.intersects(dirty) {
-      let visibleGlyphs = layout.glyphRange(
-        forBoundingRect: dirty.offsetBy(dx: -origin.x, dy: -origin.y), in: container)
-      let visibleCharacters = layout.characterRange(
-        forGlyphRange: visibleGlyphs, actualGlyphRange: nil)
-      for (index, character) in record.lineStarts.enumerated()
-      where character >= visibleCharacters.location && character <= NSMaxRange(visibleCharacters) {
+    let visibleGlyphs = layout.glyphRange(
+      forBoundingRect: dirty.offsetBy(dx: -origin.x, dy: -origin.y), in: container)
+    let visibleCharacters = layout.characterRange(
+      forGlyphRange: visibleGlyphs, actualGlyphRange: nil)
+    for record in records(intersecting: visibleCharacters)
+    where record.numbers && record.frame.intersects(dirty) {
+      func upperBound(_ value: Int) -> Int {
+        var lower = 0
+        var upper = record.lineStarts.count
+        while lower < upper {
+          let middle = (lower + upper) / 2
+          if record.lineStarts[middle] <= value { lower = middle + 1 } else { upper = middle }
+        }
+        return lower
+      }
+      let first = max(0, upperBound(visibleCharacters.location) - 1)
+      let last = upperBound(NSMaxRange(visibleCharacters))
+      for index in first..<last {
+        let character = record.lineStarts[index]
         guard character < text.string.utf16.count else { continue }
         if let hidden = record.hiddenRange, NSLocationInRange(character, hidden) { continue }
         let glyph = layout.glyphIndexForCharacter(at: character)
@@ -780,10 +861,23 @@ final class ReaderOverflowTable: NSTextTable {
     }
   }
 
-  func drawPanels() {
+  func drawPanels(in region: CGRect? = nil) {
     guard let text = textView else { return }
-    for record in records
-    where record.kind == .code && record.panelFrame.intersects(text.visibleRect) {
+    let dirty = region ?? text.visibleRect
+    var lower = 0
+    var upper = panelRecords.count
+    while lower < upper {
+      let middle = (lower + upper) / 2
+      if panelRecords[middle].panelFrame.maxY <= dirty.minY {
+        lower = middle + 1
+      } else {
+        upper = middle
+      }
+    }
+    while lower < panelRecords.count, panelRecords[lower].panelFrame.minY < dirty.maxY {
+      let record = panelRecords[lower]
+      lower += 1
+      guard record.panelFrame.intersects(dirty) else { continue }
       let path = NSBezierPath(roundedRect: record.panelFrame, xRadius: 10, yRadius: 10)
       record.surfaceColor.setFill()
       path.fill()

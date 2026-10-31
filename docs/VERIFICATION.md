@@ -76,6 +76,61 @@ slices, and the local review copy passes strict nested signature verification.
 Only arm64 was executed. Performance figures remain the earlier V1 baseline as
 explicitly identified in PERFORMANCE.md.
 
+## Real-content minimap follow-up
+
+The replacement minimap uses actual native glyphs, syntax colors, table decoration
+and loaded images. It keeps uniform scale and follows a virtual vertical window
+for long documents. It uses the existing text layout with bounded raster tiles,
+not a second live renderer or a full-height bitmap.
+
+The focused offscreen suite passed **7 tests / 1 suite in 1.085 seconds**, Xcode
+TEST SUCCEEDED and runner exit 0 (`build-minimap-offscreen3.log`). Checks cover
+real colored glyph/image pixels and offscreen code panels; panel-only padding;
+identical selected/unselected raster pixels with unchanged single/multiple native
+selections; click/drag continuity and accessibility actions; bounded Retina cache
+allocation/reuse; fold, horizontal offset and line-number invalidation; and
+cancellation/release with a retained minimap. Cache accounting, including two
+working bitmap buffers, stayed within its 8 MiB ceiling in the native test.
+This is an allocation-accounting assertion, not an app RSS measurement.
+The existing CodeBlockControls suite also passed **10 tests / 1 suite in 0.217
+seconds**, TEST SUCCEEDED and runner exit 0 (`build-minimap-code-regression.log`).
+These two targeted runs do not replace the full app-hosted suite.
+
+Earlier failed runs exposed a selection overlay in the miniature and a strong
+reference retained by the test fixture. The preview now exposes an empty
+selection only during synchronous native drawing, without setting/changing the
+real selection. The release test drops its own strong fixture before asserting
+weak graph release. Exact pixel and weak-release assertions were retained.
+Swift 6 callback isolation was fixed through the existing main-actor controller
+bridge; no new unsafe or unchecked annotation was added.
+
+The final Universal Release archived successfully (`build-release-minimap-final.log`).
+All six native binaries include arm64/x86_64 slices; the ad-hoc review app
+passes strict nested signature verification. Both `build/Review/MarkUp.app` and
+`build/MinimapReview/MarkUp.app` contain this final build. Their local review ZIPs
+and checksums are refreshed together. Only arm64 was executed. These local
+review copies are not Developer ID signed or notarized.
+
+After unlocking, the full app-hosted gate passed **60 tests / 13 suites in
+11.119 seconds**, Xcode TEST SUCCEEDED and wrapper exit 0
+(`build-app-minimap-accepted.log`). Actual UI inspection caught negative tile
+positions painting beyond the native view into the titlebar/footer. The view now
+clips all drawing to its bounds; a translated bitmap regression requires real
+inside content and exactly zero modified outside pixels. The final run includes
+that test. An earlier run lost application activation during annotation command
+routing; the same focus assertions passed on the final run without alteration.
+
+Actual short/long-document UI inspection confirmed recognizable headings, prose,
+syntax-colored code, tables and loaded images. Clicking the short preview reached
+its end; dragging the long preview reached top/middle/end, with matching native
+scrollbar values. Light/dark, 90%/100% zoom and hide/re-enable refreshed the map.
+The original System appearance, English language and 100% zoom were restored.
+The final rebuilt app was checked again at the long document’s end: miniature
+painting stays inside the content area, with no titlebar/footer bleed. Current
+CPU/memory observations are recorded in [PERFORMANCE.md](PERFORMANCE.md). No
+private document was used as a fixture or published. Astra independently
+approved the integrated handoff with the documented idle CPU exception.
+
 ## External and unexecuted release gates
 
 No Git remote, Team ID, Developer ID export, notarization credentials, production update key/feed or authorized release environment is configured. No remote push or public release occurred. Owner setup must precede Developer ID signing/notarization, Gatekeeper acceptance, protected GitHub CI execution, controlled N→N+1 Sparkle download/install/relaunch and invalid-signature installation rejection. See [English release guide](RELEASING.md) and [Turkish owner walkthrough](OWNER_SETUP_TR.md).
@@ -87,7 +142,7 @@ Mermaid rendering, final logo/icon and App Store publication are deliberate late
 ## Local handoff artifacts and readiness
 
 - `build/Review/MarkUp.app`: optimized Universal local review app, ad-hoc signed with development entitlements; App Sandbox remains enabled. The archive strips framework headers, so its local Sparkle framework seal is refreshed before signing the review app. This is not a Developer ID distribution.
-- `build/MarkUp-unsigned.xcarchive`: current unsigned Release archive, including the code-panel follow-up.
+- `build/MarkUp-unsigned.xcarchive`: current unsigned Release archive, including the code-panel and real-content minimap follow-ups.
 - `artifacts/MarkUp-0.1.0-local-review-universal.zip` and `artifacts/SHA256SUMS`: local review package/checksum; not public release assets.
 - `artifacts/review.pdf`: original public fixture exported and replaced through the real sandboxed Save panel.
 - `artifacts/`: numeric measurements and local diagnostic evidence; ignored by Git.
