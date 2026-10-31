@@ -3,8 +3,10 @@
 Kod ve workflow hazırlığı hesap erişimi olmadan yapılabilir. Gerçek Developer ID
 imzası, Apple notarization ve N → N+1 kurulum testi için sizin Apple/GitHub
 hesaplarınızdaki işlemler gerekir. Özel anahtarları, `.p12`/`.p8` dosyalarını ve
-parolaları sohbete göndermeyin. Workflow yalnızca inceleme artifact'ı üretir;
-GitHub Release veya appcast yayını yapmaz.
+parolaları sohbete göndermeyin. `main` üzerindeki bir `vX.Y.Z` tag'i, `release`
+environment onayından sonra imzalı/notarized asset'leri üretir ve GitHub Release'i
+(ZIP, `appcast.xml`, `SHA256SUMS`, `release-evidence.json`) otomatik yayınlar.
+Harici bir feed adresine appcast yüklemez.
 
 İngilizce teknik başvuru ve workflow'un tam davranışı: [RELEASING.md](RELEASING.md).
 
@@ -157,8 +159,8 @@ iddia edilmez; log'daki submission ID ile `notarytool history/log` üzerinden
 araştırın. Bu akış kalıcı self-hosted runner için onaylanmış değildir.
 
 Başarılı çıktılar `artifacts/release` altında ZIP, `appcast.xml`, `SHA256SUMS` ve
-`release-evidence.json` olarak oluşur. Actions artifact'ını indirmek public release
-oluşturmaz. İmza takımı, sürüm/build numarası, notarization/ticket ve gerçek
+`release-evidence.json` olarak oluşur; `publish` job'ı checksum'ları doğrulayıp
+bunları GitHub Release'e ekler. İmza takımı, sürüm/build numarası, notarization/ticket ve gerçek
 mimari/OS test kayıtlarını inceleyin.
 
 ## 7. Kontrollü gerçek güncelleme testi ve yayın
@@ -180,9 +182,9 @@ Liquid Glass, Türkçe/İngilizce, keyboard/VoiceOver ve performans kontrol kay�
 tamamlayın. Sahip tarafından iletilen logo 2026-10-31 tarihinde uygulama ikonuna
 eklendi. Sonraki ikon değişikliklerinden sonra archive/imza/notarization tekrar gerekir.
 
-Ancak ayrıca açık yayın yetkisi verdikten sonra son ZIP/checksum'ı ilgili GitHub
-Release'e yükleyin, indirilen byte'ları doğrulayın ve **en son appcast'i** gerçek
-feed adresine koyun. Eski sürümler bulunan bir feed'e yeni item'ı kontrollü ekleyip
+Tag'i yalnızca bu kontroller tamamlandıktan sonra `main` üzerinde oluşturun;
+`release` environment onayı son yayın kapısıdır. Feed GitHub Release dışında
+barınıyorsa yayınlanan **en son appcast'i** gerçek feed adresine koyun. Eski sürümler bulunan bir feed'e yeni item'ı kontrollü ekleyip
 desteklenen branch item'larını koruyun. Uygulamaya private repo token'ı gömmeyin.
 
 ## 8. Anahtar yenileme ve App Store geçişi

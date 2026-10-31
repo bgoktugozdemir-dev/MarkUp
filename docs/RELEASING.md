@@ -1,9 +1,12 @@
 # Release engineering
 
 MarkUp prepares **Developer ID signed, notarized Universal macOS apps** for GitHub
-Releases. The workflow uploads review artifacts only. It does **not** create a
-GitHub Release, change repository visibility, publish an appcast, or submit to the
-App Store. Those are separate owner-authorized actions. See [the Turkish owner
+Releases. Pushing a `vMAJOR.MINOR.PATCH` tag that points to a commit on `main`
+runs the `Release` workflow: checks, owner-approved signing in the protected
+`release` environment, then a `publish` job that verifies `SHA256SUMS` and creates
+the GitHub Release with the ZIP, `appcast.xml`, checksums, and evidence (as a
+draft first, then published as latest). It does not change repository visibility,
+upload the appcast to an external feed host, or submit to the App Store. See [the Turkish owner
 walkthrough](OWNER_SETUP_TR.md) before configuring credentials.
 
 No Git remote or production feed was configured during initial implementation.
@@ -17,8 +20,9 @@ or embedded token. Blank feed/key settings intentionally disable updating.
   localization, pinned dependencies/resources, executes native tests, and compiles
   and inspects both `arm64` and `x86_64` slices. `generic/platform=macOS` and
   `ONLY_ACTIVE_ARCH=NO` are mandatory for package modules as well as the app.
-- Release preparation runs for `vMAJOR.MINOR.PATCH` tags. Manual dispatch must
-  select such a tag. A protected `release` environment must restrict deployment
+- Release preparation runs for `vMAJOR.MINOR.PATCH` tags whose commit is on
+  `main`; other tags fail before any secrets are used. Manual dispatch must
+  select such a tag. Only the `publish` job receives `contents: write`. A protected `release` environment must restrict deployment
   tags to `v*` and require an owner review. Protect tag creation/deletion with a
   repository ruleset; tag only reviewed commits. There is no `pull_request_target`
   workflow, artifact reuse from untrusted builds, or PR code checkout with secrets.
@@ -31,7 +35,7 @@ or embedded token. Blank feed/key settings intentionally disable updating.
   Workflows request `-onlyUsePackageVersionsFromResolvedFile`; do not regenerate
   them silently in release jobs. Sparkle is pinned to 2.10.1.
 - `.github/actions-lock.json` separately pins official action commits. Checkout
-  v7.0.1 and upload-artifact v7.0.2 were verified using official release metadata and
+  v7.0.1, upload-artifact v7.0.2 and download-artifact v8.0.2 were verified using official release metadata and
   `git ls-remote`. Monthly Dependabot PRs must update/review both workflow SHA
   references and the lock manifest. Verify new tags against the owning repository;
   run `actionlint` and `python3 scripts/release-check.py` before merging. Do not
@@ -71,8 +75,8 @@ Create these **environment secrets**, never repository files or chat messages:
 and workflow run number. The latter is the app's monotonic `CFBundleVersion`, not
 the marketing version. Never reuse or decrease it after a workflow migration.
 No GitHub PAT or long-lived keychain password is needed. A random temporary
-keychain password is generated per run and masked. GITHUB_TOKEN has contents-read
-permissions only; artifact upload uses the Actions runtime token.
+keychain password is generated per run and masked. GITHUB_TOKEN is contents-read
+for signing jobs and contents-write only in the secret-free `publish` job.
 
 The script's `--preflight` mode reports missing names without importing secrets.
 It validates base64 and expected key lengths before invoking Sparkle, because some
@@ -200,9 +204,12 @@ The CryptoKit self-test in CI proves the cryptographic valid/tampered/wrong-key
 boundary, **not** Sparkle installation/relaunch. Those end-to-end tests remain an
 owner gate until real signing/feed setup exists.
 
-After explicit publication approval, upload the final ZIP/checksums/evidence to
-the matching GitHub tag release. Verify its public HTTPS download bytes against
-`SHA256SUMS`, then publish the appcast at exactly `MARKUP_UPDATE_FEED`. Publish
+Approving the `release` environment is the publication approval: the `publish`
+job uploads the final ZIP/checksums/evidence/appcast to the tag's GitHub Release.
+If `MARKUP_UPDATE_FEED` is
+`https://github.com/OWNER/REPOSITORY/releases/latest/download/appcast.xml`, the
+feed is live as soon as the release leaves draft; otherwise publish the appcast at
+exactly `MARKUP_UPDATE_FEED` after verifying the public download bytes. Publish
 the feed last so clients never see a missing archive. The initial generated feed
 contains the prepared version only; when maintaining an established feed, merge
 the reviewed new item into the existing feed and preserve supported older branch

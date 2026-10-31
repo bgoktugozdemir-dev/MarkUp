@@ -1,4 +1,4 @@
-name: Prepare signed release assets
+name: Release
 on:
   push:
     tags: ['v*']
@@ -20,6 +20,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Require a vMAJOR.MINOR.PATCH tag on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Tag $TAG is not vMAJOR.MINOR.PATCH"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::Tag $TAG does not point to a commit on main"; exit 1; }
       - run: python3 scripts/release-check.py
       - run: xcrun swift-format lint --strict --recursive Sources Tests
       - run: swift test --disable-sandbox
@@ -58,7 +65,7 @@ jobs:
         run: bash scripts/release-prepare.sh --preflight
       - name: Archive, export, notarize, staple, and sign final bytes
         run: bash scripts/release-prepare.sh
-      - name: Preserve reviewable assets without publishing a release
+      - name: Preserve signed assets for the publish job
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: MarkUp-${{ github.ref_name }}-review
@@ -66,3 +73,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+  publish:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: MarkUp-${{ github.ref_name }}-review
+          path: release
+      - name: Verify checksums of the notarized assets
+        working-directory: release
+        run: sha256sum --check --strict SHA256SUMS
+      - name: Create GitHub Release
+        working-directory: release
+        run: |
+          # Draft first so the release (and appcast) only becomes visible with every asset attached.
+          gh release create "$TAG" --verify-tag --draft --title "MarkUp ${TAG#v}" --generate-notes \
+            "MarkUp-${TAG#v}.zip" appcast.xml SHA256SUMS release-evidence.json
+          gh release edit "$TAG" --draft=false --latest
