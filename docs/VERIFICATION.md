@@ -154,13 +154,43 @@ rendering/PDF and native layout, passed. Latest log:
 `build-app-visual-polish-final.log`. No assertion was removed or weakened. No new
 performance measurement is claimed for this visual-only follow-up.
 
+## Owner artwork and first Developer ID package (2026-10-31)
+
+The owner supplied `Branding/MarkUp.png`; all ten standard macOS icon slots now
+contain resized copies preserving transparency. The development icon generator
+writes to an ignored build folder by default. Version 0.1.0, build 2 was archived
+and exported with the owner's Developer ID Application identity, team
+`78N26NU5P4`. Local logs: `build-release-developerid.log` and
+`build-export-developerid.log`. No private key or credential was exported or
+committed; notarization used the owner's existing `MarkUp-notary` Keychain profile.
+
+Apple accepted submission `829d7028-1ba2-48b8-8295-211b09ea7e63` with no issues.
+The ticket was stapled to the app and validated. Post-staple verification checks
+all six Universal Mach-O binaries and nested Developer ID signatures, timestamps,
+hardened runtime and sandbox entitlements. Gatekeeper reports **accepted**, with
+source **Notarized Developer ID**. The ZIP was recreated after stapling and its
+integrity/checksum verified. Evidence is in `artifacts/developer-id/`.
+
+The signed app opened the original visual fixture on this arm64 host. Its About
+panel displays the supplied icon and Version 0.1.0 (2). On first launch macOS
+requested access to the preceding development build's application data because
+the signing identity changed. The owner explicitly clicked Open Anyway; no
+container data was deleted and no system protection was disabled.
+
+The signed app is `build/DeveloperID/MarkUp.app`; the final package is
+`artifacts/developer-id/MarkUp-0.1.0-build2-universal.zip`. Automatic updates remain
+disabled because the production feed/public key are blank. No GitHub release or
+App Store submission occurred. This artwork/signing change did not rerun native
+behavior tests or performance measurements; the preceding 59/60 focus-test
+qualification and historical performance exceptions remain applicable.
+
 ## External and unexecuted release gates
 
-No Git remote, Team ID, Developer ID export, notarization credentials, production update key/feed or authorized release environment is configured. No remote push or public release occurred. Owner setup must precede Developer ID signing/notarization, Gatekeeper acceptance, protected GitHub CI execution, controlled N→N+1 Sparkle download/install/relaunch and invalid-signature installation rejection. See [English release guide](RELEASING.md) and [Turkish owner walkthrough](OWNER_SETUP_TR.md).
+Local Developer ID export, notarization and Gatekeeper acceptance are now verified as recorded above. No Git remote, production update key/feed or protected GitHub release environment is configured. No remote push or public release occurred. Owner setup is still required for protected GitHub CI execution, controlled N→N+1 Sparkle download/install/relaunch and invalid-signature installation rejection. See [English release guide](RELEASING.md) and [Turkish owner walkthrough](OWNER_SETUP_TR.md).
 
 macOS 14/15 fallback runtime, macOS 26 runtime and physical Intel execution require other systems. This host verifies macOS 27 native materials; no unguarded custom macOS-26 glass API is used. Actual VoiceOver speech/rotor behavior and the complete system Reduce Transparency/Motion/Increase Contrast matrix remain manual checks; native AX names/actions, layout and keyboard focus were checked. Printer output to physical hardware is not claimed.
 
-Mermaid rendering, final logo/icon and App Store publication are deliberate later scope. The development icon is original and temporary.
+Mermaid rendering and App Store publication remain deliberate later scope. The owner-supplied product icon is integrated.
 
 ## Local handoff artifacts and readiness
 
@@ -176,8 +206,10 @@ Mermaid rendering, final logo/icon and App Store publication are deliberate late
 | Universal archive, dependency locks, localization and source checks | Completed locally |
 | Event-driven reload, annotation/PDF failure paths, actual close/reopen cleanup | Completed locally |
 | Warm-open/reload 500-ms targets; every cold/idle sample within target | Not fully met; actual misses and profiles documented |
-| Signing/notarization/Gatekeeper, hosted CI, real Sparkle install/relaunch/rejection | External setup required; unverified |
+| Local Developer ID signing, notarization and Gatekeeper | Verified for 0.1.0 (2) |
+| Hosted CI, real Sparkle install/relaunch/rejection | External setup required; unverified |
 | Other supported macOS versions, physical Intel, full VoiceOver/system-a11y matrix | Additional hardware/manual validation required |
-| Final icon, Mermaid rendering, App Store publication | Explicit later scope |
+| Owner-supplied final icon | Integrated and observed in signed app |
+| Mermaid rendering, App Store publication | Explicit later scope |
 
 No remote push, release publication or App Store submission was performed.

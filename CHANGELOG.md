@@ -8,4 +8,6 @@ Code blocks now group their language and icon controls inside a rounded code sur
 
 The left minimap now previews actual rendered text, syntax colors, tables and loaded images with uniform scaling, bounded cached tiles and click/drag navigation. Its content is composited at 70% opacity to reduce distraction. Inline code uses appearance-aware red text and softly rounded neutral backgrounds in the reader.
 
+The app icon now uses the owner-supplied blue book artwork; build 2 prepares the first local Developer ID distribution.
+
 This entry describes development scope, not a published release. Executed checks and outstanding gates are tracked in `docs/VERIFICATION.md`.

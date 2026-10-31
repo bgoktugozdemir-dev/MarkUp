@@ -135,3 +135,15 @@ changes; root reviewed, formatted, built and checked actual light/dark UI using
 original fixture content. The Universal local apps are refreshed. Validation is
 qualified: 59/60 native tests passed, while the unchanged application-activation
 requirement in the annotation undo test failed twice. See `VERIFICATION.md`.
+
+
+## First signed package and owner logo (2026-10-31)
+
+Owner-provided artwork replaced the development icon. Local Developer ID archive
+and export succeeded for version 0.1.0 (2); all six Universal binaries and nested
+signatures passed verification. Apple notarization Accepted, staple validation
+and Gatekeeper accepted/Notarized Developer ID were verified. The owner approved
+macOS's one-time access prompt for the preceding development app's data; actual
+signed launch and About-panel artwork/version were then observed. Final ZIP and
+evidence are under `artifacts/developer-id/`. No public release or automatic update
+feed was configured. Existing test/performance qualifications remain documented.

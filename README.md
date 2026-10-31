@@ -2,7 +2,7 @@
 
 A native, typography-led Markdown reader for macOS 14 and later. Built with SwiftUI, AppKit, Swift Markdown, and the native text system. Source files are read-only; editing belongs in your chosen external editor.
 
-**Development status:** V1 is implemented and available for local review, with measured warm-open, reload and idle-CPU performance exceptions. This repository is not yet a signed, notarized public release. See [verification](docs/VERIFICATION.md) for executed checks and remaining gates. The development icon is temporary.
+**Development status:** V1 is implemented and available for local review, with measured warm-open, reload and idle-CPU performance exceptions. A local Developer ID-signed, Apple-notarized Universal package is available; no public release has been published. See [verification](docs/VERIFICATION.md) for executed checks and remaining gates. The app icon uses the owner-supplied artwork in `Branding/MarkUp.png`.
 
 ## Build and run
 

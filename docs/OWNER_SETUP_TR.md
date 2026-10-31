@@ -177,8 +177,8 @@ kurulmadıkça bu end-to-end gate **doğrulanmamış** kalır.
 
 Ayrıca Apple Silicon + Intel üzerinde çalışma, macOS 14/15 görünümü, güncel
 Liquid Glass, Türkçe/İngilizce, keyboard/VoiceOver ve performans kontrol kayıtlarını
-tamamlayın. Geçici icon'u son GPT Image tasarımıyla değiştirme ayrı bir takip işidir;
-son icon değişikliğinden sonra archive/imza/notarization tekrar gerekir.
+tamamlayın. Sahip tarafından iletilen logo 2026-10-31 tarihinde uygulama ikonuna
+eklendi. Sonraki ikon değişikliklerinden sonra archive/imza/notarization tekrar gerekir.
 
 Ancak ayrıca açık yayın yetkisi verdikten sonra son ZIP/checksum'ı ilgili GitHub
 Release'e yükleyin, indirilen byte'ları doğrulayın ve **en son appcast'i** gerçek

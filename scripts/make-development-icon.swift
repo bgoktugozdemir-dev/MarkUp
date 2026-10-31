@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 // Original temporary development artwork, deliberately not final product branding.
-let output = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Sources/MarkUpApp/Resources/Assets.xcassets/AppIcon.appiconset")
+let output = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "build/DevelopmentIcon.appiconset")
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 var images: [[String: String]] = []
 for points in [16, 32, 128, 256, 512] {
