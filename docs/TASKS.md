@@ -125,3 +125,13 @@ Astra independently approved the final integrated handoff, including source,
 strict test/log evidence and the explicitly qualified performance observation.
 No implementation blocker remains. No remote push or publication occurred.
 Existing external release gates remain unchanged.
+
+
+## Visual polish follow-up (2026-10-31)
+
+The owner explicitly selected Terra for quieter 70% minimap content and red inline
+code matching the supplied visual reference. Terra implemented the three source
+changes; root reviewed, formatted, built and checked actual light/dark UI using
+original fixture content. The Universal local apps are refreshed. Validation is
+qualified: 59/60 native tests passed, while the unchanged application-activation
+requirement in the annotation undo test failed twice. See `VERIFICATION.md`.

@@ -9,6 +9,7 @@ extension NSAttributedString.Key {
   static let markupCodeLanguage = Self("MarkUp.codeLanguage")
   static let markupTableHeader = Self("MarkUp.tableHeader")
   static let markupTableColumn = Self("MarkUp.tableColumn")
+  static let markupInlineCode = Self("MarkUp.inlineCode")
 }
 
 struct RenderedBlock: Identifiable {
@@ -288,7 +289,13 @@ final class NativeMarkdownRenderer {
       case .code(let code):
         var attrs = htmlAttributes
         attrs[.font] = font(preferences.codeFont, size: bodyFont.pointSize * 0.9, mono: true)
-        attrs[.backgroundColor] = NSColor.quaternaryLabelColor
+        attrs[.foregroundColor] = NSColor(name: nil) { appearance in
+          appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(calibratedRed: 1, green: 0.55, blue: 0.58, alpha: 1)
+            : NSColor(calibratedRed: 0.72, green: 0.13, blue: 0.18, alpha: 1)
+        }
+        attrs[.backgroundColor] = NSColor.labelColor.withAlphaComponent(0.08)
+        attrs[.markupInlineCode] = true
         result.append(NSAttributedString(string: code, attributes: attrs))
       case .emphasis(let children), .strong(let children):
         var attrs = htmlAttributes

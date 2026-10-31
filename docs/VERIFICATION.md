@@ -131,6 +131,29 @@ CPU/memory observations are recorded in [PERFORMANCE.md](PERFORMANCE.md). No
 private document was used as a fixture or published. Astra independently
 approved the integrated handoff with the documented idle CPU exception.
 
+## Minimap opacity and inline-code styling (2026-10-31)
+
+At the owner's explicit request, Terra (`gpt-6.1-terra`, medium) implemented
+70% compositing for minimap content while retaining the viewport marker. Inline
+backtick code now uses appearance-aware red text and a subtle neutral background;
+the native reader rounds its background without changing text or selection ranges.
+The separate PDF layout retains the new colors with rectangular backgrounds.
+Fenced-code themes are unchanged.
+
+The Universal Release archive succeeded (`build-release-visual-polish.log`), all
+six Mach-O binaries verify as Universal, and strict nested local signatures pass.
+Formatting, release checks and diff checks passed. Actual local Release UI was
+checked with an original generated fixture in light and dark appearances; the
+System preference was restored. Both local Review app paths are refreshed.
+
+Two full native attempts completed 59 of 60 tests successfully; the unchanged
+`ReaderAnnotationUndoTests.focusedReaderRoutesUndoToDurableAnnotationsAfterRenderingUpdates`
+failed its `NSApp.isActive`/activation wait in both runs. This is not a passing
+full-suite gate. All 12 other suites, including eight minimap tests, code controls,
+rendering/PDF and native layout, passed. Latest log:
+`build-app-visual-polish-final.log`. No assertion was removed or weakened. No new
+performance measurement is claimed for this visual-only follow-up.
+
 ## External and unexecuted release gates
 
 No Git remote, Team ID, Developer ID export, notarization credentials, production update key/feed or authorized release environment is configured. No remote push or public release occurred. Owner setup must precede Developer ID signing/notarization, Gatekeeper acceptance, protected GitHub CI execution, controlled N→N+1 Sparkle download/install/relaunch and invalid-signature installation rejection. See [English release guide](RELEASING.md) and [Turkish owner walkthrough](OWNER_SETUP_TR.md).

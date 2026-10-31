@@ -337,7 +337,7 @@ struct MinimapView: NSViewRepresentable {
         width: bounds.width, height: CGFloat(image.height) / tiles.backingScale)
       NSImage(cgImage: image, size: rect.size).draw(
         in: rect, from: .zero,
-        operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        operation: .sourceOver, fraction: 0.7, respectFlipped: true, hints: nil)
     }
     var thumb = map.thumb
     thumb.size.width = bounds.width

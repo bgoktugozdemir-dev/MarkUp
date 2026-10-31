@@ -182,6 +182,26 @@ final class ReaderOverflowTable: NSTextTable {
     }
   }
 
+  override func fillBackgroundRectArray(
+    _ rectArray: UnsafePointer<NSRect>, count rectCount: Int,
+    forCharacterRange charRange: NSRange, color: NSColor
+  ) {
+    if charRange.location < (textStorage?.length ?? 0),
+      textStorage?.attribute(.markupInlineCode, at: charRange.location, effectiveRange: nil) != nil,
+      let background = textStorage?.attribute(
+        .backgroundColor, at: charRange.location, effectiveRange: nil) as? NSColor,
+      background == color
+    {
+      color.setFill()
+      for rect in UnsafeBufferPointer(start: rectArray, count: rectCount) {
+        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+      }
+    } else {
+      super.fillBackgroundRectArray(
+        rectArray, count: rectCount, forCharacterRange: charRange, color: color)
+    }
+  }
+
   nonisolated private func drawingSegments(_ glyphs: NSRange, origin: CGPoint) -> [(
     range: NSRange, clip: CGRect?
   )] {
