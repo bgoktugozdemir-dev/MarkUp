@@ -147,6 +147,7 @@
 "Source" = "Source";
 "Storage" = "Storage";
 "System" = "System";
+"Test build: separate from the installed MarkUp and its data" = "Test build: separate from the installed MarkUp and its data";
 "The annotation could not be saved. Select complete characters and try again." = "The annotation could not be saved. Select complete characters and try again.";
 "The file could not be read. Check its location, encoding, and access permissions. The last readable version is kept." = "The file could not be read. Check its location, encoding, and access permissions. The last readable version is kept.";
 "The owner must configure the signed update feed and public key before distributing MarkUp." = "The owner must configure the signed update feed and public key before distributing MarkUp.";

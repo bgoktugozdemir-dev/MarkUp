@@ -396,6 +396,12 @@ struct ReaderView: View {
           }
         }
         Text("\(Int(settings.value.zoom * 100))%")
+        #if DEBUG
+          Text("DEV").font(.caption2.weight(.heavy)).foregroundStyle(.white)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(.orange, in: Capsule())
+            .help(localized("Test build: separate from the installed MarkUp and its data"))
+        #endif
       }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 6)
     }
     .frame(minWidth: session.showAnnotations ? 730 : 500, minHeight: 360)

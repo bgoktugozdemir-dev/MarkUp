@@ -147,6 +147,7 @@
 "Source" = "Kaynak";
 "Storage" = "Depolama";
 "System" = "Sistem";
+"Test build: separate from the installed MarkUp and its data" = "Test sürümü: yüklü MarkUp'tan ve verilerinden ayrıdır";
 "The annotation could not be saved. Select complete characters and try again." = "İşaret kaydedilemedi. Tam karakterleri seçip yeniden deneyin.";
 "The file could not be read. Check its location, encoding, and access permissions. The last readable version is kept." = "Dosya okunamadı. Konumunu, kodlamasını ve erişim izinlerini kontrol edin. Son okunabilir sürüm korundu.";
 "The owner must configure the signed update feed and public key before distributing MarkUp." = "MarkUp dağıtılmadan önce imzalı güncelleme kaynağı ve açık anahtar yapılandırılmalıdır.";

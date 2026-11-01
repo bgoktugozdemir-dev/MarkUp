@@ -25,6 +25,10 @@ Use `arch=x86_64` only on a runner that can execute it. A successful cross-build
 
 Core tests use temporary private directories; source fixtures are never modified. Generated stress documents are ignored by Git and reproduced from an original public generator. Development artifacts live under `build/`, which is ignored. Do not copy private test materials into tracked paths or CI uploads.
 
+## Environments
+
+Debug builds are the test environment: **MarkUp Dev** (`MarkUp Dev.app`) with bundle ID `com.bgoktugozdemir.MarkUp.dev`, an orange DEV icon badge and a DEV label in the status bar. Its own sandbox container keeps preferences, annotations and folder grants apart from the installed MarkUp, and its update feed is always empty. Release builds keep the name `MarkUp` and ID `com.bgoktugozdemir.MarkUp`. After changing `AppIcon`, regenerate the badge with `swift scripts/make-dev-app-icon.swift`.
+
 ## Temporary icon
 
 `scripts/make-development-icon.swift` produces an original development-only icon. Replace the asset catalog with the later GPT Image design at all required macOS resolutions, inspect light/dark Dock appearances, and rebuild before public branding. Final logo generation is intentionally deferred.

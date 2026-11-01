@@ -106,10 +106,10 @@ def cleanup(build, hosts, executable=None, initial=frozenset()):
 
 def run(args):
     derived = (ROOT / args.derived_data).resolve()
-    executable = str(derived / "Build/Products/Debug/MarkUp.app/Contents/MacOS/MarkUp")
+    executable = str(derived / "Build/Products/Debug/MarkUp Dev.app/Contents/MacOS/MarkUp Dev")
     existing = processes()
-    if any(item.executable.endswith("/Contents/MacOS/MarkUp") for item in existing):
-        raise RuntimeError("Close other MarkUp app/test copies before running native focus tests.")
+    if any(item.executable.endswith("/Contents/MacOS/MarkUp Dev") for item in existing):
+        raise RuntimeError("Close other MarkUp Dev app/test copies before running native focus tests.")
     initial = set(existing)
     command = [
         "xcodebuild", "-project", "MarkUp.xcodeproj", "-scheme", "MarkUp",

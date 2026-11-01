@@ -13,6 +13,7 @@ View Mode|Görünüm Modu
 Preview|Önizleme
 Source|Kaynak
 Widen the window to show this panel|Bu paneli göstermek için pencereyi genişletin
+Test build: separate from the installed MarkUp and its data|Test sürümü: yüklü MarkUp'tan ve verilerinden ayrıdır
 Clear Recent Documents|Son Kullanılan Belgeleri Temizle
 Undo|Geri Al
 Redo|Yinele

@@ -12,4 +12,6 @@ The outline and minimap now float in the reader's left and right margins instead
 
 The app icon now uses the owner-supplied blue book artwork; build 2 prepares the first local Developer ID distribution.
 
+Debug builds are now a separate test environment, MarkUp Dev, with its own bundle ID and sandbox data, an orange DEV icon badge and a DEV label in the status bar; it never checks for updates.
+
 This entry describes development scope, not a published release. Executed checks and outstanding gates are tracked in `docs/VERIFICATION.md`.
