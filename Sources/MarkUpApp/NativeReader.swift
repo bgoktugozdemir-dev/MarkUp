@@ -111,7 +111,8 @@ struct NativeReader: NSViewRepresentable {
     let originalViewport = scroll.contentView.bounds.origin
     context.coordinator.preferredContentWidth = preferences.contentWidth
     let originalContainerWidth = text.textContainer?.size.width ?? 0
-    let originalVisibleCharacter = context.coordinator.visibleCharacter()
+    let anchor = context.coordinator.readingAnchor()
+    let originalVisibleCharacter = anchor?.character ?? 0
     text.frame.size.width = scroll.contentSize.width
     let width = max(180, min(preferences.contentWidth, scroll.contentSize.width - 64))
     let widthChanged = abs(originalContainerWidth - width) > 0.5
@@ -125,9 +126,7 @@ struct NativeReader: NSViewRepresentable {
       if widthChanged {
         text.fitDocument()
         text.frame.size.width = scroll.contentSize.width
-        if originalVisibleCharacter < text.string.utf16.count {
-          text.scrollRangeToVisible(NSRange(location: originalVisibleCharacter, length: 0))
-        }
+        if let anchor { coordinator.restore(anchor) }
       }
       text.codeControls?.updateFrames()
       coordinator.updateGeometry()
@@ -165,13 +164,16 @@ struct NativeReader: NSViewRepresentable {
       }
     }
     text.codeControls?.prepare(
-      display, rendered: rendered, document: session.document, preferences: preferences)
+      display, rendered: rendered, document: session.showSource ? nil : session.document,
+      preferences: preferences)
     let contentChanged = oldText != display.string
     if contentChanged { coordinator.selectionRestorer.cancel() }
     coordinator.isUpdatingContent = true
     text.textStorage?.setAttributedString(display)
     text.fitDocument()
     text.frame.size.width = scroll.contentSize.width
+    // Short code blocks fold during this pass; restoring first would land on the unfolded layout.
+    text.codeControls?.updateFrames()
     if !contentChanged, NSMaxRange(oldSelection) <= display.length {
       text.setSelectedRange(oldSelection)
     } else {
@@ -187,10 +189,14 @@ struct NativeReader: NSViewRepresentable {
     if unchangedLayout {
       scroll.contentView.scroll(to: originalViewport)
       scroll.reflectScrolledClipView(scroll.contentView)
-    } else if let oldBlock, let newBlock = rendered.blocks.first(where: { $0.id == oldBlock.id }) {
-      text.scrollRangeToVisible(
-        NSRange(
-          location: min(NSMaxRange(newBlock.range), newBlock.range.location + offset), length: 0))
+    } else if let anchor, let oldBlock,
+      let newBlock = rendered.blocks.first(where: { $0.id == oldBlock.id })
+    {
+      coordinator.restore(
+        anchor,
+        character: min(NSMaxRange(newBlock.range), newBlock.range.location + offset))
+    } else if let anchor, !contentChanged {
+      coordinator.restore(anchor)
     }
     coordinator.updateGeometry()
     text.codeControls?.updateFrames()
@@ -262,6 +268,7 @@ struct NativeReader: NSViewRepresentable {
         if !isUpdatingContent { selectionRestorer.cancel() }
         let previous = session.selection
         session.selection = view.selectedRange()
+        guard !isUpdatingContent else { return }
         (view as? ReaderTextView)?.codeControls?.revealSelection(
           session.selection, previous: previous)
       }
@@ -279,6 +286,46 @@ struct NativeReader: NSViewRepresentable {
         in: container)
       return glyph < layout.numberOfGlyphs ? layout.characterIndexForGlyph(at: glyph) : 0
     }
+
+    struct ReadingAnchor {
+      var character: Int
+      var fraction: CGFloat
+      var leading: CGFloat
+    }
+
+    /// The top line is usually partly clipped. Recording its visible fraction lets a re-layout
+    /// put the viewport back on the same spot; scrollRangeToVisible would reveal the whole line
+    /// and creep upward on every preference change.
+    func readingAnchor() -> ReadingAnchor? {
+      guard let text = ownedTextView, session.textView === text, let layout = text.layoutManager,
+        let container = text.textContainer, layout.numberOfGlyphs > 0
+      else { return nil }
+      let y = text.visibleRect.minY - text.textContainerOrigin.y
+      let glyph = layout.glyphIndex(for: CGPoint(x: 0, y: max(0, y)), in: container)
+      guard glyph < layout.numberOfGlyphs else { return nil }
+      let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+      let fraction =
+        y <= line.minY || line.height <= 0 ? 0 : min(1, (y - line.minY) / line.height)
+      return ReadingAnchor(
+        character: layout.characterIndexForGlyph(at: glyph), fraction: fraction,
+        leading: min(0, y - line.minY))
+    }
+
+    func restore(_ anchor: ReadingAnchor, character: Int? = nil) {
+      guard let text = ownedTextView, session.textView === text,
+        let scroll = text.enclosingScrollView, let layout = text.layoutManager
+      else { return }
+      let target = character ?? anchor.character
+      guard target >= 0, target < text.string.utf16.count else { return }
+      let glyph = layout.glyphIndexForCharacter(at: target)
+      guard glyph < layout.numberOfGlyphs else { return }
+      let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+      let y = text.textContainerOrigin.y + line.minY + anchor.leading + anchor.fraction * line.height
+      let limit = max(0, text.frame.height - scroll.contentView.bounds.height)
+      scroll.contentView.scroll(
+        to: NSPoint(x: scroll.contentView.bounds.minX, y: min(limit, max(0, y))))
+      scroll.reflectScrolledClipView(scroll.contentView)
+    }
     func updateGeometry() {
       // AppKit tiles the scroll view during text replacement and fitting. The completed
       // updateNSView pass publishes geometry once; intermediate scans repeat full block work.
@@ -294,7 +341,8 @@ struct NativeReader: NSViewRepresentable {
       session.viewport = text.visibleRect
       session.documentHeight = max(1, text.bounds.height)
       session.minimap.update(
-        source: text, revision: revision, enabled: AppSettings.shared.value.showMinimap)
+        source: text, revision: revision,
+        enabled: AppSettings.shared.value.showMinimap && session.minimapVisible)
     }
 
     private func cancelInitialRestore() {
@@ -347,15 +395,13 @@ struct NativeReader: NSViewRepresentable {
         undo?.enableUndoRegistration()
         synchronizingWidth = false
       }
-      let firstVisible = visibleCharacter()
+      let anchor = readingAnchor()
       text.textContainerInset.width = inset
       container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
       if widthChanged { text.codeControls?.containerDidResize() }
       text.fitDocument()
       text.frame.size.width = scroll.contentSize.width
-      if widthChanged, firstVisible < text.string.utf16.count {
-        text.scrollRangeToVisible(NSRange(location: firstVisible, length: 0))
-      }
+      if widthChanged, let anchor { restore(anchor) }
     }
   }
 }

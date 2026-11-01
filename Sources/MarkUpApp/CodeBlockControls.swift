@@ -99,6 +99,7 @@ final class ReaderOverflowTable: NSTextTable {
     drawBackground(forGlyphRange: glyphs, at: textOrigin)
     drawGlyphs(forGlyphRange: glyphs, at: textOrigin)
     codeControls?.drawLineNumbers(in: region)
+    codeControls?.drawEmbeddedPreviews(in: region)
   }
 
   nonisolated func layoutManager(
@@ -155,6 +156,26 @@ final class ReaderOverflowTable: NSTextTable {
     let controls = codeControls
     let hidden = MainActor.assumeIsolated { controls?.hiddenRanges ?? [] }
     return hidden.contains { NSLocationInRange(charIndex, $0) } ? .zeroAdvancement : action
+  }
+
+  /// The collapsed line of a short block reserves the height of its embedded scroll view.
+  nonisolated func layoutManager(
+    _ layoutManager: NSLayoutManager,
+    shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+    lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
+    baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer,
+    forGlyphRange glyphRange: NSRange
+  ) -> Bool {
+    precondition(Thread.isMainThread, "Reader layout is main-thread owned")
+    let controls = codeControls
+    let characters = layoutManager.characterRange(
+      forGlyphRange: glyphRange, actualGlyphRange: nil)
+    let height = MainActor.assumeIsolated { controls?.reservedHeight(in: characters) }
+    guard let height, height > lineFragmentUsedRect.pointee.height else { return false }
+    let extra = height - lineFragmentUsedRect.pointee.height
+    lineFragmentRect.pointee.size.height += extra
+    lineFragmentUsedRect.pointee.size.height += extra
+    return true
   }
 
   override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
@@ -262,9 +283,17 @@ final class ReaderOverflowTable: NSTextTable {
   var headerFrame: CGRect = .zero
   var scrollbarFrame: CGRect = .zero
   var measuredGeometryRevision = -1
-  var limited = false
-  var hiddenRange: NSRange?
-  var foldCandidate: NSRange?
+  /// Fully visible rows in the short view; half of one further row shows at the bottom edge.
+  static let limitedRows = 12
+  var limited = true
+  var hiddenRanges: [NSRange] = []
+  /// Character index of every visual row, measured from the unfolded layout.
+  var rowStarts: [Int]?
+  var rowPitch: CGFloat = 16
+  var canLimit: Bool { (rowStarts?.count ?? 0) > Self.limitedRows + 1 }
+  /// A short block hides its code in the reader flow and shows it in its own scroll view.
+  var embedded: Bool { limited && !hiddenRanges.isEmpty }
+  var viewportHeight: CGFloat { rowPitch * (CGFloat(Self.limitedRows) + 0.5) }
   var panelFrame: CGRect = .zero
   var controlColor: NSColor {
     let rgb = surfaceColor.usingColorSpace(.deviceRGB)
@@ -320,7 +349,7 @@ final class ReaderOverflowTable: NSTextTable {
     var wrap: Bool?
     var numbers: Bool?
     var offset: CGFloat = 0
-    var limited = false
+    var limited: Bool?
   }
   weak var textView: ReaderTextView?
   private(set) var records: [CodeBlockRecord] = []
@@ -337,6 +366,9 @@ final class ReaderOverflowTable: NSTextTable {
   var containerWidth: CGFloat { textView?.textContainer?.size.width ?? 1 }
   var documentHeight: CGFloat { textView?.bounds.height ?? 1 }
   private(set) var hiddenRanges: [NSRange] = []
+  private var viewports: [String: CodeBlockViewport] = [:]
+  private var viewportOffsets: [String: CGPoint] = [:]
+  private var previewTexts: [String: NSAttributedString] = [:]
 
   init(textView: ReaderTextView) { self.textView = textView }
 
@@ -354,6 +386,9 @@ final class ReaderOverflowTable: NSTextTable {
       if let scroller = scrollers[record.id], !scroller.isHidden, scroller.frame.intersects(visible)
       {
         elements.append(scroller)
+      }
+      if let viewport = viewports[record.id], viewport.frame.intersects(visible) {
+        elements.append(viewport.textView)
       }
     }
     return elements
@@ -394,6 +429,9 @@ final class ReaderOverflowTable: NSTextTable {
     currentPreferences = preferences
     geometryRevision += 1
     previewRevision += 1
+    // Viewports copy display text; rebuild them from this render, keeping their scroll offsets.
+    for id in Array(viewports.keys) { removeViewport(id) }
+    previewTexts = [:]
     panelRecords = []
     panelIndexRevision = -1
     hiddenRanges = []
@@ -438,7 +476,7 @@ final class ReaderOverflowTable: NSTextTable {
           .backgroundColor, at: range.location, effectiveRange: nil) as? NSColor
           ?? .textBackgroundColor)
       record.offset = record.wrap ? 0 : saved?.offset ?? 0
-      record.limited = !isTable && (saved?.limited ?? false)
+      record.limited = !isTable && (saved?.limited ?? preferences.limitCodeHeight ?? true)
       if isTable {
         prepareTable(record, storage: display)
       } else {
@@ -525,7 +563,9 @@ final class ReaderOverflowTable: NSTextTable {
     geometryRevision += 1
     previewRevision += 1
     guard let storage = textView?.textStorage, let layout = textView?.layoutManager else { return }
-    for record in records where record.kind == .code { invalidateFold(record) }
+    // Short blocks keep their fold: only their own scroll view relays out at the new width.
+    for record in records where record.kind == .code && !record.embedded { invalidateFold(record) }
+    previewTexts = [:]
     for record in records where record.kind == .table {
       guard NSMaxRange(record.range) <= storage.length else { continue }
       storage.enumerateAttribute(.paragraphStyle, in: record.range) { value, _, _ in
@@ -562,29 +602,31 @@ final class ReaderOverflowTable: NSTextTable {
         var contentRight: CGFloat = 0
         if record.kind == .code {
           var cursor = glyphs.location
-          var row = 0
-          if record.hiddenRange == nil { record.foldCandidate = nil }
+          let unfolded = record.hiddenRanges.isEmpty
+          var rows: [Int] = []
           while cursor < NSMaxRange(glyphs) {
             var line = NSRange()
             let used = layout.lineFragmentUsedRect(forGlyphAt: cursor, effectiveRange: &line)
             contentRight = max(contentRight, used.maxX)
-            row += 1
-            if row == 13, record.hiddenRange == nil {
-              var boundary = layout.characterIndexForGlyph(at: cursor)
-              let source = text.string as NSString
-              if boundary > record.range.location, source.character(at: boundary - 1) == 10 {
-                boundary -= 1
-              }
-              // Keep the block's final newline so following prose retains its own paragraph.
-              let end = NSMaxRange(record.range) - 1
-              if boundary < end {
-                record.foldCandidate = NSRange(location: boundary, length: end - boundary)
-              }
-            }
+            if unfolded { rows.append(layout.characterIndexForGlyph(at: cursor)) }
             cursor = max(cursor + 1, NSMaxRange(line))
           }
-          if record.limited, record.hiddenRange == nil, let hidden = record.foldCandidate {
-            record.hiddenRange = hidden
+          if unfolded {
+            record.rowStarts = rows
+            if rows.count > CodeBlockRecord.limitedRows + 1 {
+              // Row 0 carries the toolbar spacing, so measure the pitch from row 1.
+              let top = layout.lineFragmentRect(
+                forGlyphAt: layout.glyphIndexForCharacter(at: rows[1]), effectiveRange: nil)
+              let bottom = layout.lineFragmentRect(
+                forGlyphAt: layout.glyphIndexForCharacter(
+                  at: rows[CodeBlockRecord.limitedRows + 1]), effectiveRange: nil)
+              record.rowPitch = max(1, (bottom.minY - top.minY) / CGFloat(CodeBlockRecord.limitedRows))
+            }
+          }
+          if record.limited, unfolded, record.canLimit, record.range.length > 1 {
+            record.hiddenRanges = [
+              NSRange(location: record.range.location, length: record.range.length - 1)
+            ]
             folds.append(record)
           }
         }
@@ -609,6 +651,10 @@ final class ReaderOverflowTable: NSTextTable {
         if record.kind == .table {
           record.frame.origin.y = origin.y + first.minY
           record.frame.size.height = max(first.height, last.maxY - first.minY)
+        } else if record.embedded {
+          let baseline = last.minY + layout.location(forGlyphAt: NSMaxRange(glyphs) - 1).y
+          record.frame.origin.y = origin.y + baseline - font.ascender - 2
+          record.frame.size.height = record.viewportHeight
         }
         record.measuredGeometryRevision = geometryRevision
         geometryMeasurementCount += 1
@@ -644,8 +690,15 @@ final class ReaderOverflowTable: NSTextTable {
         header.frame = record.headerFrame
         header.refresh(record)
       }
+      if record.embedded {
+        let viewport = viewport(for: record, in: text)
+        viewport.frame = record.frame
+        viewport.layoutContent()
+      } else {
+        removeViewport(record.id)
+      }
       let maxOffset = maximumOffset(record)
-      if !record.wrap && maxOffset > 0 {
+      if !record.embedded && !record.wrap && maxOffset > 0 {
         let scroller =
           scrollers[record.id]
           ?? CodeBlockScroller(recordID: record.id, owner: self, table: record.kind == .table)
@@ -663,9 +716,9 @@ final class ReaderOverflowTable: NSTextTable {
     }
     if !folds.isEmpty {
       previewRevision += 1
-      hiddenRanges.append(contentsOf: folds.compactMap(\.hiddenRange))
+      hiddenRanges.append(contentsOf: folds.flatMap(\.hiddenRanges))
       for record in folds {
-        if let range = record.hiddenRange {
+        for range in record.hiddenRanges {
           layout.invalidateGlyphs(
             forCharacterRange: range, changeInLength: 0, actualCharacterRange: nil)
         }
@@ -694,6 +747,7 @@ final class ReaderOverflowTable: NSTextTable {
     for id in scrollers.keys.filter({ !visibleIDs.contains($0) }) {
       scrollers.removeValue(forKey: id)?.removeFromSuperview()
     }
+    for id in viewports.keys where !visibleIDs.contains(id) { removeViewport(id) }
     if panelIndexRevision != geometryRevision {
       panelRecords = records.filter { $0.kind == .code }.sorted {
         $0.panelFrame.minY < $1.panelFrame.minY
@@ -728,7 +782,7 @@ final class ReaderOverflowTable: NSTextTable {
 
   func toggleLimit(_ id: String, enabled: Bool) {
     guard let record = byID[id], record.kind == .code,
-      !enabled || record.foldCandidate != nil
+      !enabled || record.canLimit
     else { return }
     var options = overrides[id] ?? Options()
     options.limited = enabled
@@ -740,26 +794,75 @@ final class ReaderOverflowTable: NSTextTable {
   }
 
   private func invalidateFold(_ record: CodeBlockRecord) {
-    let previous = record.hiddenRange
-    record.hiddenRange = nil
-    record.foldCandidate = nil
-    if let previous {
-      hiddenRanges.removeAll { $0 == previous }
+    record.rowStarts = nil
+    setHiddenRanges(record, [])
+  }
+
+  private func setHiddenRanges(_ record: CodeBlockRecord, _ ranges: [NSRange]) {
+    let previous = record.hiddenRanges
+    guard previous != ranges else { return }
+    record.hiddenRanges = ranges
+    hiddenRanges.removeAll { previous.contains($0) }
+    hiddenRanges.append(contentsOf: ranges)
+    for range in previous + ranges {
       textView?.layoutManager?.invalidateGlyphs(
-        forCharacterRange: previous, changeInLength: 0, actualCharacterRange: nil)
+        forCharacterRange: range, changeInLength: 0, actualCharacterRange: nil)
     }
   }
 
-  /// Search, keyboard selection and reading restoration reveal the original canonical range.
+  /// Line height reserved by the collapsed line holding a short block's final newline.
+  func reservedHeight(in characters: NSRange) -> CGFloat? {
+    for record in records(intersecting: characters) where record.embedded {
+      let newline = NSMaxRange(record.range) - 1
+      if NSLocationInRange(newline, characters) { return record.viewportHeight }
+    }
+    return nil
+  }
+
+  private func viewport(for record: CodeBlockRecord, in text: ReaderTextView) -> CodeBlockViewport {
+    if let existing = viewports[record.id] { return existing }
+    let content = NSRange(location: record.range.location, length: record.range.length - 1)
+    let viewport = CodeBlockViewport(
+      record: record,
+      content: text.textStorage?.attributedSubstring(from: content) ?? NSAttributedString())
+    viewport.frame = record.frame
+    text.addSubview(viewport)
+    viewports[record.id] = viewport
+    viewport.layoutContent()
+    if let offset = viewportOffsets[record.id] { viewport.scroll(to: offset) }
+    return viewport
+  }
+
+  private func removeViewport(_ id: String) {
+    guard let viewport = viewports.removeValue(forKey: id) else { return }
+    viewportOffsets[id] = viewport.offset
+    viewport.removeFromSuperview()
+  }
+
+  /// Current scroll position inside a short block, if it is mounted.
+  func viewportOffset(_ id: String) -> CGPoint? { viewports[id]?.offset }
+
+  /// Search, keyboard selection and reading restoration scroll a short block to the target.
   @discardableResult
   func revealHiddenContent(in selection: NSRange) -> Bool {
+    guard let text = textView else { return false }
     let hidden = records.filter { record in
-      guard let range = record.hiddenRange else { return false }
-      return selection.length == 0
-        ? NSLocationInRange(selection.location, range)
-        : NSIntersectionRange(selection, range).length > 0
+      // Select All spans whole blocks; scrolling each short view would be pointless.
+      guard record.embedded, NSIntersectionRange(selection, record.range) != record.range else {
+        return false
+      }
+      return record.hiddenRanges.contains { range in
+        selection.length == 0
+          ? NSLocationInRange(selection.location, range)
+          : NSIntersectionRange(selection, range).length > 0
+      }
     }
-    for record in hidden { toggleLimit(record.id, enabled: false) }
+    for record in hidden {
+      let start = max(selection.location, record.range.location)
+      let end = min(NSMaxRange(selection), NSMaxRange(record.range) - 1)
+      viewport(for: record, in: text).reveal(
+        NSRange(location: start - record.range.location, length: max(0, end - start)))
+    }
     return !hidden.isEmpty
   }
 
@@ -773,7 +876,9 @@ final class ReaderOverflowTable: NSTextTable {
     if revealHiddenContent(in: selection) { text.scrollRangeToVisible(selection) }
     let active =
       selection.location != previous.location ? selection.location : NSMaxRange(selection)
-    guard active < text.string.utf16.count, let record = record(at: active), !record.wrap else {
+    guard active < text.string.utf16.count, let record = record(at: active), !record.wrap,
+      !record.embedded
+    else {
       return
     }
     let glyph = layout.glyphIndexForCharacter(at: active)
@@ -791,7 +896,7 @@ final class ReaderOverflowTable: NSTextTable {
   func scrollWheel(_ event: NSEvent) -> Bool {
     guard let text = textView else { return false }
     let point = text.convert(event.locationInWindow, from: nil)
-    guard let record = records.first(where: { !$0.wrap && $0.frame.contains(point) }),
+    guard let record = records.first(where: { !$0.wrap && !$0.embedded && $0.frame.contains(point) }),
       maximumOffset(record) > 0
     else { return false }
     let horizontal =
@@ -867,7 +972,7 @@ final class ReaderOverflowTable: NSTextTable {
       for index in first..<last {
         let character = record.lineStarts[index]
         guard character < text.string.utf16.count else { continue }
-        if let hidden = record.hiddenRange, NSLocationInRange(character, hidden) { continue }
+        if record.hiddenRanges.contains(where: { NSLocationInRange(character, $0) }) { continue }
         let glyph = layout.glyphIndexForCharacter(at: character)
         let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
         var numberAttributes = attrs
@@ -878,6 +983,35 @@ final class ReaderOverflowTable: NSTextTable {
             x: record.frame.minX + record.gutter - label.size().width - 11,
             y: origin.y + line.minY + layout.location(forGlyphAt: glyph).y - font.ascender))
       }
+    }
+  }
+
+  /// The minimap paints the opening rows of each short block; its own views are not drawn there.
+  func drawEmbeddedPreviews(in region: CGRect) {
+    guard let storage = textView?.textStorage else { return }
+    for record in records where record.embedded && record.frame.intersects(region) {
+      let preview: NSAttributedString
+      if let cached = previewTexts[record.id] {
+        preview = cached
+      } else {
+        guard let rows = record.rowStarts, rows.count > CodeBlockRecord.limitedRows + 1,
+          NSMaxRange(record.range) <= storage.length
+        else { continue }
+        let end = rows[CodeBlockRecord.limitedRows + 1]
+        preview = CodeBlockViewport.displayText(
+          storage.attributedSubstring(
+            from: NSRange(location: record.range.location, length: end - record.range.location)),
+          wrap: record.wrap)
+        previewTexts[record.id] = preview
+      }
+      NSGraphicsContext.saveGraphicsState()
+      NSBezierPath(rect: record.frame).addClip()
+      preview.draw(
+        with: CGRect(
+          x: record.frame.minX + record.gutter, y: record.frame.minY + 2,
+          width: max(1, record.frame.width - record.gutter * 2), height: record.frame.height),
+        options: [.usesLineFragmentOrigin])
+      NSGraphicsContext.restoreGraphicsState()
     }
   }
 
@@ -1005,13 +1139,14 @@ final class ReaderOverflowTable: NSTextTable {
     numbersButton.state = record.numbers ? .on : .off
     numbersButton.setAccessibilityLabel(localized("Line numbers for this code block"))
     numbersButton.toolTip = localized("Line numbers for this code block")
-    heightButton.title = localized(record.limited ? "Show all code" : "Limit code height")
+    let folded = record.limited && record.canLimit
+    heightButton.title = localized(folded ? "Show all code" : "Limit code height")
     heightButton.setAccessibilityLabel(heightButton.title)
-    heightButton.isEnabled = record.foldCandidate != nil || record.hiddenRange != nil
+    heightButton.isEnabled = record.canLimit
     heightButton.toolTip =
       heightButton.isEnabled ? heightButton.title : localized("All code is already visible")
     heightButton.image = NSImage(
-      systemSymbolName: record.limited
+      systemSymbolName: folded
         ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left",
       accessibilityDescription: nil)
     optionsButton.title = "…"
@@ -1169,5 +1304,243 @@ final class ReaderOverflowTable: NSTextTable {
     default: break
     }
     owner?.setScroll(recordID, fraction: doubleValue)
+  }
+}
+
+/// A short code block's own native scroll view, mounted over the space its collapsed
+/// characters reserve in the reader. The reader's text storage keeps the canonical code.
+@MainActor final class CodeBlockViewport: NSView {
+  let scrollView = CodeViewportScrollView()
+  let textView: CodeViewportTextView
+  private let fade = CodeViewportFade()
+  private let wrap: Bool
+  private let fadeHeight: CGFloat
+
+  static func displayText(_ source: NSAttributedString, wrap: Bool) -> NSAttributedString {
+    let text = NSMutableAttributedString(attributedString: source)
+    text.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: text.length)) {
+      value, range, _ in
+      let style =
+        ((value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle)
+        ?? NSMutableParagraphStyle()
+      // Toolbar and trailing spacing belong to the reader flow, not the scrolled code.
+      style.paragraphSpacingBefore = 0
+      style.paragraphSpacing = 0
+      style.lineBreakMode = wrap ? .byCharWrapping : .byClipping
+      text.addAttribute(.paragraphStyle, value: style, range: range)
+    }
+    return text
+  }
+
+  init(record: CodeBlockRecord, content: NSAttributedString) {
+    wrap = record.wrap
+    fadeHeight = record.rowPitch
+    let storage = NSTextStorage(attributedString: Self.displayText(content, wrap: record.wrap))
+    let layout = NSLayoutManager()
+    storage.addLayoutManager(layout)
+    let container = NSTextContainer(
+      size: NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
+    container.lineFragmentPadding = 0
+    container.widthTracksTextView = record.wrap
+    layout.addTextContainer(container)
+    textView = CodeViewportTextView(frame: .zero, textContainer: container)
+    textView.isEditable = false
+    textView.isSelectable = true
+    textView.isRichText = true
+    textView.drawsBackground = false
+    textView.textContainerInset = NSSize(width: record.gutter, height: 2)
+    textView.isVerticallyResizable = true
+    textView.isHorizontallyResizable = !record.wrap
+    textView.maxSize = NSSize(
+      width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    textView.autoresizingMask = record.wrap ? [.width] : []
+    textView.lineStarts = record.lineStarts.map { $0 - record.range.location }
+    textView.showsNumbers = record.numbers
+    textView.gutter = record.gutter
+    textView.surfaceColor = record.surfaceColor
+    textView.numberColor = record.controlColor.withAlphaComponent(0.45)
+    let size =
+      (storage.length > 0 ? storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil)?
+      .pointSize ?? 13
+    textView.numberFont = .monospacedDigitSystemFont(ofSize: min(12, size * 0.85), weight: .regular)
+    textView.setAccessibilityLabel(localized("Code language") + ": " + record.language)
+    super.init(frame: .zero)
+    scrollView.drawsBackground = false
+    scrollView.contentView.drawsBackground = false
+    scrollView.borderType = .noBorder
+    scrollView.hasVerticalScroller = true
+    scrollView.hasHorizontalScroller = !record.wrap
+    scrollView.autohidesScrollers = true
+    scrollView.scrollerStyle = .overlay
+    scrollView.documentView = textView
+    scrollView.onScroll = { [weak self] in self?.updateFade() }
+    addSubview(scrollView)
+    fade.color = record.surfaceColor
+    addSubview(fade)
+  }
+  required init?(coder: NSCoder) { nil }
+  override var isFlipped: Bool { true }
+
+  var offset: CGPoint { scrollView.contentView.bounds.origin }
+
+  func layoutContent() {
+    scrollView.frame = bounds
+    let viewport = scrollView.contentSize
+    textView.minSize = NSSize(width: viewport.width, height: viewport.height)
+    if wrap { textView.frame.size.width = viewport.width }
+    if let layout = textView.layoutManager, let container = textView.textContainer {
+      layout.ensureLayout(for: container)
+    }
+    textView.sizeToFit()
+    fade.frame = CGRect(
+      x: 0, y: bounds.height - fadeHeight, width: bounds.width, height: fadeHeight)
+    updateFade()
+  }
+
+  func scroll(to point: CGPoint) {
+    let clip = scrollView.contentView
+    let maxX = max(0, textView.frame.width - clip.bounds.width)
+    let maxY = max(0, textView.frame.height - clip.bounds.height)
+    clip.scroll(to: NSPoint(x: min(maxX, max(0, point.x)), y: min(maxY, max(0, point.y))))
+    scrollView.reflectScrolledClipView(clip)
+  }
+
+  func reveal(_ range: NSRange) {
+    guard NSMaxRange(range) <= (textView.string as NSString).length else { return }
+    textView.setSelectedRange(range)
+    textView.scrollRangeToVisible(range)
+  }
+
+  private func updateFade() {
+    let clip = scrollView.contentView.bounds
+    fade.isHidden = clip.maxY >= textView.frame.height - 1
+  }
+}
+
+/// Owns a scroll gesture only when it starts over the block and the block can move that way;
+/// otherwise the whole gesture goes to the reader, so a page scroll is never captured midway.
+@MainActor final class CodeViewportScrollView: NSScrollView {
+  var onScroll: (() -> Void)?
+  private var ownsGesture: Bool?
+  private var pending: [NSEvent] = []
+  private var lastTimestamp: TimeInterval = 0
+
+  override func reflectScrolledClipView(_ clipView: NSClipView) {
+    super.reflectScrolledClipView(clipView)
+    onScroll?()
+  }
+
+  override func scrollWheel(with event: NSEvent) {
+    let gesture = !event.phase.isEmpty || !event.momentumPhase.isEmpty
+    guard gesture else {
+      route(event, toSelf: canScroll(event))
+      return
+    }
+    let starting = event.phase.contains(.began) || event.phase.contains(.mayBegin)
+    if starting {
+      ownsGesture = nil
+      pending = []
+    } else if event.timestamp - lastTimestamp > 0.3 {
+      // A mid-gesture event after a pause belongs to a gesture that began elsewhere.
+      ownsGesture = false
+      pending = []
+    }
+    lastTimestamp = event.timestamp
+    if ownsGesture == nil {
+      let moving = event.scrollingDeltaX != 0 || event.scrollingDeltaY != 0
+      let finishing = event.phase.contains(.ended) || event.phase.contains(.cancelled)
+      guard moving || finishing else {
+        pending.append(event)
+        return
+      }
+      ownsGesture = moving && canScroll(event)
+      let queued = pending
+      pending = []
+      for queuedEvent in queued { route(queuedEvent, toSelf: ownsGesture == true) }
+    }
+    route(event, toSelf: ownsGesture == true)
+  }
+
+  private func route(_ event: NSEvent, toSelf: Bool) {
+    if toSelf {
+      super.scrollWheel(with: event)
+    } else if let outer = superview?.enclosingScrollView {
+      outer.scrollWheel(with: event)
+    } else {
+      nextResponder?.scrollWheel(with: event)
+    }
+  }
+
+  private func canScroll(_ event: NSEvent) -> Bool {
+    guard let document = documentView else { return false }
+    let clip = contentView.bounds
+    let dx = event.scrollingDeltaX
+    let dy = event.scrollingDeltaY
+    if abs(dx) > abs(dy) {
+      return hasHorizontalScroller && document.frame.width > clip.width + 0.5
+    }
+    if dy > 0 { return clip.minY > 0.5 }
+    if dy < 0 { return clip.maxY < document.frame.height - 0.5 }
+    return false
+  }
+}
+
+@MainActor final class CodeViewportTextView: NSTextView {
+  var lineStarts: [Int] = []
+  var showsNumbers = false
+  var gutter: CGFloat = 16
+  var surfaceColor = NSColor.textBackgroundColor
+  var numberColor = NSColor.secondaryLabelColor
+  var numberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+
+  override func draw(_ dirtyRect: NSRect) {
+    super.draw(dirtyRect)
+    guard showsNumbers, let layout = layoutManager, let container = textContainer else { return }
+    let origin = textContainerOrigin
+    let visible = visibleRect
+    if visible.minX > 0 {
+      // Unwrapped code scrolls sideways beneath the pinned gutter.
+      surfaceColor.setFill()
+      CGRect(x: visible.minX, y: dirtyRect.minY, width: gutter - 4, height: dirtyRect.height).fill()
+    }
+    let glyphs = layout.glyphRange(
+      forBoundingRect: dirtyRect.offsetBy(dx: -origin.x, dy: -origin.y), in: container)
+    let characters = layout.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+    var lower = 0
+    var upper = lineStarts.count
+    while lower < upper {
+      let middle = (lower + upper) / 2
+      if lineStarts[middle] <= characters.location { lower = middle + 1 } else { upper = middle }
+    }
+    var index = max(0, lower - 1)
+    let length = (string as NSString).length
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: numberFont, .foregroundColor: numberColor,
+    ]
+    while index < lineStarts.count, lineStarts[index] <= NSMaxRange(characters),
+      lineStarts[index] < length
+    {
+      let glyph = layout.glyphIndexForCharacter(at: lineStarts[index])
+      let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+      let label = NSAttributedString(string: String(index + 1), attributes: attributes)
+      label.draw(
+        at: CGPoint(
+          x: visible.minX + gutter - label.size().width - 11,
+          y: origin.y + line.minY + layout.location(forGlyphAt: glyph).y - numberFont.ascender))
+      index += 1
+    }
+  }
+}
+
+/// Fades the half-visible last row into the panel surface while more code remains below.
+@MainActor final class CodeViewportFade: NSView {
+  var color = NSColor.textBackgroundColor
+  override var isFlipped: Bool { true }
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  override func draw(_ dirtyRect: NSRect) {
+    NSGradient(
+      colors: [color.withAlphaComponent(0), color.withAlphaComponent(0.85)],
+      atLocations: [0, 1], colorSpace: .deviceRGB)?
+      .draw(in: bounds, angle: 90)
   }
 }

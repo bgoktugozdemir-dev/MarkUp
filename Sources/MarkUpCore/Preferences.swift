@@ -29,6 +29,7 @@ public struct ReaderPreferences: Codable, Sendable, Equatable {
   public var showMinimap = true
   public var showOutline = false
   public var wrapCode = true
+  public var limitCodeHeight: Bool? = true
   public var lineNumbers = false
   public var allowRemoteImages = false
   public var externalEditorBookmark: Data?

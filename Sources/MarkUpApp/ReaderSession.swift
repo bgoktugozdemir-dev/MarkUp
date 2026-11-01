@@ -23,6 +23,10 @@ import SwiftUI
   var showRecovery = false
   var recoveryDocuments: [AnnotationDocumentSummary] = []
   var remoteAllowed = false
+  var imagesNeedFolderAccess = false
+  var showSource = false
+  /// False while the window leaves no margin for the minimap; its tiles then stay idle.
+  @ObservationIgnored var minimapVisible = true
   var exportPresented = false
   var exportTask: Task<Void, Never>?
   var exportProgress: PDFExportProgress?
@@ -52,6 +56,8 @@ import SwiftUI
   private var layoutGeneration = 0
   private var anchorWork: Task<Void, Never>?
   private var imageWork: Task<Void, Never>?
+  @ObservationIgnored private var sourceTokens: [SyntaxToken]?
+  @ObservationIgnored private var sourceWork: Task<Void, Never>?
   @ObservationIgnored private var resourceCleanup: Task<Void, Never>?
   private let anchorWorker = AnnotationResolverWorker()
   private let injectedAnnotationStore: AnnotationStore?
@@ -156,6 +162,7 @@ import SwiftUI
     anchorWork = nil
     imageWork?.cancel()
     imageWork = nil
+    resetSourceTokens()
     annotationHistory.close()
     watcher.close()
     grants.close()
@@ -247,6 +254,7 @@ import SwiftUI
           annotations = []
         }
         resolvedAnnotations = [:]
+        if source != loaded.source || document == nil { resetSourceTokens() }
         source = loaded.source
         document = parsed
         tokens = newTokens
@@ -273,8 +281,15 @@ import SwiftUI
   func render() {
     guard let document else { return }
     layoutGeneration += 1
-    let next = NativeMarkdownRenderer().render(
-      document: document, preferences: AppSettings.shared.value, tokens: tokens)
+    let next: RenderedDocument
+    if showSource {
+      next = NativeMarkdownRenderer().renderSource(
+        document: document, preferences: AppSettings.shared.value, tokens: sourceTokens ?? [])
+      if sourceTokens == nil { highlightSource(document.source) }
+    } else {
+      next = NativeMarkdownRenderer().render(
+        document: document, preferences: AppSettings.shared.value, tokens: tokens)
+    }
     if next.attributedString.string != rendered?.attributedString.string {
       resolvedAnnotations = [:]
       unresolved = []
@@ -286,6 +301,25 @@ import SwiftUI
     imageWork?.cancel()
     let expected = generation
     imageWork = Task { [weak self] in await self?.loadImages(expected: expected) }
+  }
+
+  private func highlightSource(_ text: String) {
+    guard sourceWork == nil else { return }
+    let expected = generation
+    sourceWork = Task { [weak self, highlighter] in
+      // Documents beyond the highlighter's limits are shown as plain source.
+      let result = (try? await highlighter.highlight(text, language: "markdown")) ?? []
+      guard let self, !Task.isCancelled, expected == generation, !closed else { return }
+      sourceWork = nil
+      sourceTokens = result
+      if showSource { render() }
+    }
+  }
+
+  private func resetSourceTokens() {
+    sourceWork?.cancel()
+    sourceWork = nil
+    sourceTokens = nil
   }
 
   func refreshAnnotations() async {
@@ -308,7 +342,8 @@ import SwiftUI
     guard let text = rendered?.attributedString.string else { return }
     anchorWork?.cancel()
     anchorWork = nil
-    let marks = annotations
+    // Marks are anchored to preview text; the source view neither paints nor reports them.
+    let marks = showSource ? [] : annotations
     guard !marks.isEmpty else {
       // A fresh, unmarked document needs neither a full-text digest nor another native layout.
       // Existing painted/recovery state still gets an explicit clear publication.
@@ -346,7 +381,8 @@ import SwiftUI
   }
 
   func addAnnotation(_ style: AnnotationStyle) {
-    guard let text = rendered?.attributedString.string, documentID != nil, selection.length > 0
+    guard !showSource, let text = rendered?.attributedString.string, documentID != nil,
+      selection.length > 0
     else { return }
     let range = selection
     do {
@@ -467,7 +503,9 @@ import SwiftUI
     }
   }
 
-  func grantFolder() { if grants.grantFolder() { reload() } }
+  func grantFolder() {
+    if grants.grantFolder(suggesting: url?.deletingLastPathComponent()) { reload() }
+  }
   func loadRemoteImages() {
     remoteAllowed = true
     let expected = generation
@@ -479,6 +517,7 @@ import SwiftUI
     work?.cancel()
     tokens.removeAll()
     imageWork?.cancel()
+    resetSourceTokens()
     Task { [weak self] in
       guard let self else { return }
       await images.clear()
@@ -512,6 +551,7 @@ import SwiftUI
     }
     var decodedBytes = 0.0
     var unavailable = 0
+    var needsAccess = false
     // Replace from the end so text ranges before each attachment remain valid.
     for (raw, range) in entries.prefix(64).reversed() {
       guard expected == generation, expectedLayout == layoutGeneration, !Task.isCancelled else {
@@ -558,6 +598,9 @@ import SwiftUI
       } catch {
         // Accessible placeholder remains visible.
         unavailable += 1
+        if case ImageFailure.denied = error, ResourcePolicy.externalURL(raw) == nil {
+          needsAccess = true
+        }
       }
     }
     guard expected == generation, expectedLayout == layoutGeneration, !closed, !Task.isCancelled
@@ -566,6 +609,7 @@ import SwiftUI
       self.rendered = RenderedDocument(attributedString: mutable, blocks: rendered.blocks)
       renderedRevision += 1
     }
+    imagesNeedFolderAccess = needsAccess
     if unavailable > 0 || entries.count > 64 {
       status = localized("Some images need access or are missing, unsupported, or too large.")
     } else if status

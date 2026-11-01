@@ -319,6 +319,36 @@ struct ReaderView: View {
   init(url: URL?, source: String) {
     _session = State(initialValue: ReaderSession(url: url, source: source))
   }
+
+  private struct PanelRoom: Equatable {
+    var outline = true
+    var minimap = true
+  }
+  @State private var room = PanelRoom()
+
+  /// Panels float over the reader, so each is offered only when it fits beside the text.
+  private func updateRoom(width: CGFloat) {
+    let text = max(180, min(settings.value.contentWidth, width - 64))
+    let margin = (width - text) / 2
+    let next = PanelRoom(outline: margin >= 222, minimap: margin >= 138)
+    guard next != room else { return }
+    room = next
+    session.minimapVisible = next.minimap
+    (session.textView as? ReaderTextView)?.geometryChanged?()
+  }
+
+  @ViewBuilder private var readerContent: some View {
+    if session.rendered != nil {
+      NativeReader(session: session, preferences: settings.value)
+    } else if session.loading {
+      ProgressView(localized("Loading document…")).frame(
+        maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      ContentUnavailableView(
+        localized("No readable content"), systemImage: "doc.text",
+        description: Text(localized("Open a Markdown file to begin.")))
+    }
+  }
   var body: some View {
     VStack(spacing: 0) {
       if session.showSearch { searchBar }
@@ -333,17 +363,23 @@ struct ReaderView: View {
         .padding(10).background(.orange.opacity(0.12)).accessibilityElement(children: .combine)
       }
       HStack(spacing: 0) {
-        if settings.value.showMinimap { MinimapView(session: session).frame(width: 112) }
-        if settings.value.showOutline { outline }
-        if session.rendered != nil {
-          NativeReader(session: session, preferences: settings.value)
-        } else if session.loading {
-          ProgressView(localized("Loading document…")).frame(
-            maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-          ContentUnavailableView(
-            localized("No readable content"), systemImage: "doc.text",
-            description: Text(localized("Open a Markdown file to begin.")))
+        GeometryReader { proxy in
+          readerContent
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .overlay(alignment: .leading) {
+              if settings.value.showOutline, room.outline, session.rendered != nil { outline }
+            }
+            .overlay(alignment: .trailing) {
+              if settings.value.showMinimap, room.minimap, session.rendered != nil {
+                // Leave the reader's overlay scroller uncovered.
+                MinimapView(session: session).frame(width: 112).padding(.trailing, 14)
+              }
+            }
+            .onAppear { updateRoom(width: proxy.size.width) }
+            .onChange(of: proxy.size.width) { _, width in updateRoom(width: width) }
+            .onChange(of: settings.value.contentWidth) { _, _ in
+              updateRoom(width: proxy.size.width)
+            }
         }
         if session.showAnnotations { annotationPanel }
       }
@@ -351,6 +387,9 @@ struct ReaderView: View {
         if session.loading { ProgressView().controlSize(.small) }
         Text(session.status ?? session.url?.lastPathComponent ?? "MarkUp").lineLimit(1)
         Spacer()
+        if session.imagesNeedFolderAccess {
+          Button(localized("Grant Folder Access…")) { session.grantFolder() }
+        }
         if !session.unresolved.isEmpty {
           Button(localizedCount("unmatched_annotation_count", session.unresolved.count)) {
             session.showAnnotations = true
@@ -367,11 +406,15 @@ struct ReaderView: View {
         } label: {
           Label(localized("Outline"), systemImage: "list.bullet.indent")
         }
+        .disabled(!room.outline)
+        .help(room.outline ? localized("Outline") : localized("Widen the window to show this panel"))
         Button {
           settings.value.showMinimap.toggle()
         } label: {
-          Label(localized("Minimap"), systemImage: "sidebar.left")
+          Label(localized("Minimap"), systemImage: "sidebar.right")
         }
+        .disabled(!room.minimap)
+        .help(room.minimap ? localized("Minimap") : localized("Widen the window to show this panel"))
       }
       ToolbarItemGroup {
         Button {
@@ -389,6 +432,14 @@ struct ReaderView: View {
         } label: {
           Label(localized("Zoom In"), systemImage: "textformat.size.larger")
         }
+        Picker(localized("View Mode"), selection: $session.showSource) {
+          Label(localized("Preview"), systemImage: "eye").tag(false)
+          Label(localized("Source"), systemImage: "chevron.left.forwardslash.chevron.right")
+            .tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelStyle(.iconOnly)
+        .help(localized("View Mode"))
         Menu {
           Button(localized("Highlight Yellow")) { session.addAnnotation(.highlightYellow) }
           Button(localized("Highlight Green")) { session.addAnnotation(.highlightGreen) }
@@ -408,7 +459,8 @@ struct ReaderView: View {
     .focusedSceneValue(\.readerSession, session)
     .onAppear { session.start() }
     .onDisappear { session.close() }
-    .onChange(of: settings.value) { _, _ in session.render() }
+    .onChange(of: settings.value.renderingRelevant) { _, _ in session.render() }
+    .onChange(of: session.showSource) { _, _ in session.render() }
     .onChange(of: colorScheme) { _, _ in session.render() }
     .onChange(of: session.search) { _, _ in
       session.find()
@@ -518,4 +570,16 @@ struct ReaderView: View {
 
 extension Notification.Name {
   static let requestDocumentSearchFocus = Notification.Name("MarkUp.requestDocumentSearchFocus")
+}
+
+extension ReaderPreferences {
+  /// Panel visibility and access settings never change the rendered document.
+  var renderingRelevant: ReaderPreferences {
+    var copy = self
+    copy.showMinimap = false
+    copy.showOutline = false
+    copy.allowRemoteImages = false
+    copy.externalEditorBookmark = nil
+    return copy
+  }
 }

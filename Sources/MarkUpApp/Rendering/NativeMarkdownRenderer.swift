@@ -52,21 +52,76 @@ final class NativeMarkdownRenderer {
     self.preferences = preferences
     self.tokens = tokens
     let selected = CodeTheme.theme(id: preferences.codeThemeID)
-    let dark: Bool =
-      switch preferences.appearance {
-      case .light: false
-      case .dark: true
-      case .system:
-        (NSApp.keyWindow?.effectiveAppearance ?? NSApp.effectiveAppearance).bestMatch(from: [
-          .darkAqua, .aqua,
-        ]) == .darkAqua
-      }
-    self.theme = preferences.automaticTheme ? selected.matchingAppearance(dark: dark) : selected
+    self.theme =
+      preferences.automaticTheme ? selected.matchingAppearance(dark: isDark(preferences)) : selected
     output = NSMutableAttributedString()
     rendered = []
     for block in document.blocks { append(block, depth: 0) }
     return RenderedDocument(
       attributedString: output.copy() as! NSAttributedString, blocks: rendered)
+  }
+
+  /// Raw Markdown source view. Blocks map to whole source lines so outline jumps and
+  /// reading-position restoration keep working when switching between preview and source.
+  func renderSource(
+    document: MarkdownDocument, preferences: ReaderPreferences, tokens: [SyntaxToken]
+  ) -> RenderedDocument {
+    fonts.removeAll(keepingCapacity: true)
+    self.preferences = preferences
+    // Source text sits on the window background, so token colors must suit the current appearance.
+    theme = CodeTheme.theme(id: preferences.codeThemeID).matchingAppearance(
+      dark: isDark(preferences))
+    let text = document.source as NSString
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineSpacing = 2 * preferences.zoom
+    paragraph.lineBreakMode = .byWordWrapping
+    let result = NSMutableAttributedString(
+      string: document.source,
+      attributes: [.font: codeFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
+    )
+    for token in tokens
+    where token.range.location >= 0 && token.range.length >= 0
+      && NSMaxRange(token.range) <= text.length
+    {
+      result.addAttribute(
+        .foregroundColor, value: color(theme.color(for: token.kind)), range: token.range)
+    }
+    var lineStarts = [0]
+    for index in 0..<text.length where text.character(at: index) == 0x0A {
+      lineStarts.append(index + 1)
+    }
+    func lineRange(_ span: SourceSpan) -> NSRange? {
+      guard span.startLine >= 1, span.startLine <= lineStarts.count else { return nil }
+      let start = lineStarts[span.startLine - 1]
+      let endLine = min(max(span.endLine, span.startLine), lineStarts.count)
+      let end = endLine < lineStarts.count ? lineStarts[endLine] : text.length
+      return NSRange(location: start, length: max(0, end - start))
+    }
+    var blocks: [RenderedBlock] = []
+    func collect(_ items: [MarkdownBlock]) {
+      for block in items {
+        if let span = block.sourceRange, let range = lineRange(span) {
+          blocks.append(RenderedBlock(id: block.id, range: range, kind: block.kind))
+          if let anchor = block.anchor, range.length > 0 {
+            result.addAttribute(.markupAnchor, value: anchor, range: range)
+          }
+        }
+        collect(block.children)
+      }
+    }
+    collect(document.blocks)
+    return RenderedDocument(attributedString: result.copy() as! NSAttributedString, blocks: blocks)
+  }
+
+  private func isDark(_ preferences: ReaderPreferences) -> Bool {
+    switch preferences.appearance {
+    case .light: false
+    case .dark: true
+    case .system:
+      (NSApp.keyWindow?.effectiveAppearance ?? NSApp.effectiveAppearance).bestMatch(from: [
+        .darkAqua, .aqua,
+      ]) == .darkAqua
+    }
   }
 
   private var bodyFont: NSFont {

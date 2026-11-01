@@ -115,6 +115,7 @@
 "Preparing Document" = "Belge Hazırlanıyor";
 "Preparing PDF links…" = "PDF bağlantıları hazırlanıyor…";
 "Preparing document…" = "Belge hazırlanıyor…";
+"Preview" = "Önizleme";
 "Print job submitted." = "Yazdırma işi gönderildi.";
 "Printing cancelled." = "Yazdırma iptal edildi.";
 "Printing failed. Try exporting a PDF instead." = "Yazdırma başarısız oldu. PDF dışa aktarmayı deneyin.";
@@ -139,9 +140,11 @@
 "Show Annotations" = "İşaretleri Göster";
 "Show all code" = "Kodun tamamını göster";
 "Show line numbers" = "Satır numaralarını göster";
+"Show long code blocks in short view" = "Uzun kod bloklarını kısa görünümde göster";
 "Show minimap" = "Mini haritayı göster";
 "Show outline" = "Başlıkları göster";
 "Some images need access or are missing, unsupported, or too large." = "Bazı görseller erişim izni gerektiriyor, eksik, desteklenmiyor veya çok büyük.";
+"Source" = "Kaynak";
 "Storage" = "Depolama";
 "System" = "Sistem";
 "The annotation could not be saved. Select complete characters and try again." = "İşaret kaydedilemedi. Tam karakterleri seçip yeniden deneyin.";
@@ -162,7 +165,9 @@
 "Unmatched — preserved for recovery" = "Eşleşmedi — kurtarma için korundu";
 "Updates are not configured in this development build." = "Bu geliştirme sürümünde güncellemeler yapılandırılmadı.";
 "Use current appearance" = "Geçerli görünümü kullan";
+"View Mode" = "Görünüm Modu";
 "Welcome to MarkUp" = "MarkUp’a Hoş Geldiniz";
+"Widen the window to show this panel" = "Bu paneli göstermek için pencereyi genişletin";
 "Wrap" = "Kaydır";
 "Wrap code" = "Kod satırlarını kaydır";
 "Wrap this code block" = "Bu kod bloğunun satırlarını kaydır";

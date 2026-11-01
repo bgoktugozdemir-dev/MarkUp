@@ -8,6 +8,11 @@ translations = '''Open Recent|Son Kullanılanları Aç
 Show all code|Kodun tamamını göster
 Limit code height|Kod yüksekliğini sınırla
 All code is already visible|Kodun tamamı zaten görünüyor
+Show long code blocks in short view|Uzun kod bloklarını kısa görünümde göster
+View Mode|Görünüm Modu
+Preview|Önizleme
+Source|Kaynak
+Widen the window to show this panel|Bu paneli göstermek için pencereyi genişletin
 Clear Recent Documents|Son Kullanılan Belgeleri Temizle
 Undo|Geri Al
 Redo|Yinele

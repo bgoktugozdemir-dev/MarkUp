@@ -260,6 +260,8 @@ struct CodeBlockControlsTests {
     let reader = try await reader("Before.\n\n```swift\n" + code + "```\n\nAFTER-END\n")
     defer { reader.window.close() }
     let record = try #require(reader.controls.records.first)
+    #expect(record.limited && !record.hiddenRanges.isEmpty)
+    reader.controls.toggleLimit(record.id, enabled: false)
     let original = reader.rendered.attributedString.copy() as! NSAttributedString
     if wrap { reader.controls.toggleWrap(record.id, enabled: true) }
     let canonical = reader.view.string
@@ -269,11 +271,13 @@ struct CodeBlockControlsTests {
     let expandedAfter = reader.layout.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil)
     #expect(!record.limited)
     reader.controls.toggleLimit(record.id, enabled: true)
-    let hidden = try #require(record.hiddenRange)
+    let hidden = try #require(record.hiddenRanges.last)
     #expect(record.limited)
     #expect(record.frame.height < expandedHeight / 2)
     let foldedAfter = reader.layout.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil)
     #expect(foldedAfter.minY < expandedAfter.minY / 2)
+    #expect(record.embedded)
+    #expect(foldedAfter.minY + reader.view.textContainerOrigin.y >= record.frame.maxY)
     let hit = reader.layout.characterIndex(
       for: NSPoint(x: 2, y: foldedAfter.midY), in: reader.container,
       fractionOfDistanceBetweenInsertionPoints: nil)
@@ -285,15 +289,14 @@ struct CodeBlockControlsTests {
     #expect(reader.view.writeSelection(to: pasteboard, types: reader.view.writablePasteboardTypes))
     #expect(pasteboard.string(forType: .string) == canonical)
     #expect(record.original == code)
-    // The same callback used by search and native keyboard selection must reveal hidden rows,
-    // including wrapped blocks, before horizontal-scrolling checks can return early.
-    let selection = NSRange(location: hidden.location + min(8, hidden.length - 1), length: 0)
+    // The same callback used by search and native keyboard selection must scroll the short
+    // view to hidden rows, including wrapped blocks, without expanding it.
+    let selection = NSRange(location: NSMaxRange(hidden) - 5, length: 0)
     reader.view.setSelectedRange(selection)
     reader.controls.revealSelection(selection, previous: NSRange(location: 0, length: 0))
-    #expect(!record.limited && record.hiddenRange == nil)
-    #expect(record.frame.height == expandedHeight)
-    #expect(
-      reader.layout.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil) == expandedAfter)
+    #expect(record.limited && record.embedded)
+    #expect((reader.controls.viewportOffset(record.id)?.y ?? 0) > 0)
+    #expect(record.frame.height < expandedHeight / 2)
     #expect(reader.view.selectedRange() == selection)
     #expect(reader.view.string == canonical)
   }
@@ -312,14 +315,14 @@ struct CodeBlockControlsTests {
     reader.view.fitDocument()
     reader.controls.updateFrames()
     let record = try #require(reader.controls.records.first)
-    #expect(record.id == id && record.limited && record.hiddenRange != nil)
+    #expect(record.id == id && record.limited && !record.hiddenRanges.isEmpty)
     reader.container.size.width = 240
     reader.controls.containerDidResize()
     reader.view.fitDocument()
     reader.controls.updateFrames()
-    #expect(record.limited && record.hiddenRange != nil)
+    #expect(record.limited && !record.hiddenRanges.isEmpty)
     reader.controls.toggleLimit(id, enabled: false)
-    #expect(!record.limited && record.hiddenRange == nil)
+    #expect(!record.limited && record.hiddenRanges.isEmpty)
     #expect(reader.controls.hiddenRanges.isEmpty)
     #expect(reader.view.string == reader.rendered.attributedString.string)
   }

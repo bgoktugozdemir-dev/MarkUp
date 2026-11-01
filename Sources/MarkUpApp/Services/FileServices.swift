@@ -316,10 +316,11 @@ actor ImageLoader {
   private var scoped: [URL] = []
   private(set) var restorationFailures = 0
 
-  func grantFolder() -> Bool {
+  func grantFolder(suggesting directory: URL? = nil) -> Bool {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
+    panel.directoryURL = directory
     panel.prompt = localized("Grant Access")
     panel.message = localized(
       "Choose a folder to allow local images, linked documents, and reliable replacement-save monitoring."

@@ -115,6 +115,7 @@
 "Preparing Document" = "Preparing Document";
 "Preparing PDF links…" = "Preparing PDF links…";
 "Preparing document…" = "Preparing document…";
+"Preview" = "Preview";
 "Print job submitted." = "Print job submitted.";
 "Printing cancelled." = "Printing cancelled.";
 "Printing failed. Try exporting a PDF instead." = "Printing failed. Try exporting a PDF instead.";
@@ -139,9 +140,11 @@
 "Show Annotations" = "Show Annotations";
 "Show all code" = "Show all code";
 "Show line numbers" = "Show line numbers";
+"Show long code blocks in short view" = "Show long code blocks in short view";
 "Show minimap" = "Show minimap";
 "Show outline" = "Show outline";
 "Some images need access or are missing, unsupported, or too large." = "Some images need access or are missing, unsupported, or too large.";
+"Source" = "Source";
 "Storage" = "Storage";
 "System" = "System";
 "The annotation could not be saved. Select complete characters and try again." = "The annotation could not be saved. Select complete characters and try again.";
@@ -162,7 +165,9 @@
 "Unmatched — preserved for recovery" = "Unmatched — preserved for recovery";
 "Updates are not configured in this development build." = "Updates are not configured in this development build.";
 "Use current appearance" = "Use current appearance";
+"View Mode" = "View Mode";
 "Welcome to MarkUp" = "Welcome to MarkUp";
+"Widen the window to show this panel" = "Widen the window to show this panel";
 "Wrap" = "Wrap";
 "Wrap code" = "Wrap code";
 "Wrap this code block" = "Wrap this code block";

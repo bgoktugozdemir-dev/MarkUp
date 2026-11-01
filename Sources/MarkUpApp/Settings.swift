@@ -144,6 +144,11 @@ import SwiftUI
           localized("Automatically pair light and dark themes"),
           isOn: $settings.value.automaticTheme)
         Toggle(localized("Wrap code"), isOn: $settings.value.wrapCode)
+        Toggle(
+          localized("Show long code blocks in short view"),
+          isOn: Binding(
+            get: { settings.value.limitCodeHeight ?? true },
+            set: { settings.value.limitCodeHeight = $0 }))
         Toggle(localized("Show line numbers"), isOn: $settings.value.lineNumbers)
         ThemePreview(
           theme: previewTheme, fontName: settings.value.codeFont, fontSize: settings.value.codeSize)
@@ -152,6 +157,7 @@ import SwiftUI
           settings.value.codeThemeID = defaults.codeThemeID
           settings.value.automaticTheme = defaults.automaticTheme
           settings.value.wrapCode = defaults.wrapCode
+          settings.value.limitCodeHeight = defaults.limitCodeHeight
           settings.value.lineNumbers = defaults.lineNumbers
         }
       }.tabItem { Label(localized("Code"), systemImage: "curlybraces") }

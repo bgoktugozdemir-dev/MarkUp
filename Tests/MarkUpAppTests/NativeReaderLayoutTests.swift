@@ -61,9 +61,12 @@ struct NativeReaderLayoutTests {
     // Keep closed windows alive deliberately, as NSDocument/SwiftUI may do. The native text
     // graph and session snapshots must still be released by the actual willClose boundary.
     var retainedWindows: [ReadingWindowFixture] = []
+    var preferences = ReaderPreferences()
+    // Position restoration deep inside one long fence needs the fully expanded block.
+    preferences.limitCodeHeight = !code
     for cycle in 0..<3 {
       let fixture = try await ReadingWindowFixture(
-        source: source, url: url, width: cycle == 0 ? 640 : 820)
+        source: source, url: url, width: cycle == 0 ? 640 : 820, preferences: preferences)
       retainedWindows.append(fixture)
       try await fixture.waitUntil {
         fixture.session.viewport.height > 0 && (fixture.text?.textContainer?.size.width ?? 0) > 500
@@ -230,7 +233,10 @@ private final class ReadingWindowFixture {
   let session: ReaderSession
   weak var text: NSTextView?
 
-  init(source: String, url: URL, width: CGFloat, store: AnnotationStore? = nil) async throws {
+  init(
+    source: String, url: URL, width: CGFloat, store: AnnotationStore? = nil,
+    preferences: ReaderPreferences = ReaderPreferences()
+  ) async throws {
     session = ReaderSession(url: url, source: source, annotationStore: store)
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: width, height: 600), styleMask: [.titled],
@@ -238,10 +244,11 @@ private final class ReadingWindowFixture {
     let document = try await MarkdownParser().parse(source)
     session.document = document
     session.rendered = NativeMarkdownRenderer().render(
-      document: document, preferences: ReaderPreferences(), tokens: [:])
+      document: document, preferences: preferences, tokens: [:])
     session.renderedRevision = 1
     window.isReleasedWhenClosed = false
-    window.contentView = NSHostingView(rootView: ViewportReaderHost(session: session))
+    window.contentView = NSHostingView(
+      rootView: ViewportReaderHost(session: session, preferences: preferences))
     window.makeKeyAndOrderFront(nil)
     try await waitUntil { self.session.textView?.window === self.window }
     text = session.textView
@@ -281,11 +288,12 @@ private final class ReadingWindowFixture {
 
 private struct ViewportReaderHost: View {
   let session: ReaderSession
+  var preferences = ReaderPreferences()
   var showsReader = true
   var body: some View {
     let _ = session.renderedRevision
     if showsReader {
-      NativeReader(session: session, preferences: ReaderPreferences())
+      NativeReader(session: session, preferences: preferences)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
       Color.clear

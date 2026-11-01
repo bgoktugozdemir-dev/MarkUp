@@ -404,6 +404,7 @@ struct MinimapTests {
       reader.window.close()
     }
     let record = try #require(reader.controls.records.first)
+    reader.controls.toggleLimit(record.id, enabled: false)
     var generation = reader.tiles.generation
     let height = reader.text.bounds.height
     reader.controls.setScroll(record.id, fraction: 0.5)
