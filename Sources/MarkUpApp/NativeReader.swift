@@ -320,7 +320,8 @@ struct NativeReader: NSViewRepresentable {
       let glyph = layout.glyphIndexForCharacter(at: target)
       guard glyph < layout.numberOfGlyphs else { return }
       let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-      let y = text.textContainerOrigin.y + line.minY + anchor.leading + anchor.fraction * line.height
+      let y =
+        text.textContainerOrigin.y + line.minY + anchor.leading + anchor.fraction * line.height
       let limit = max(0, text.frame.height - scroll.contentView.bounds.height)
       scroll.contentView.scroll(
         to: NSPoint(x: scroll.contentView.bounds.minX, y: min(limit, max(0, y))))

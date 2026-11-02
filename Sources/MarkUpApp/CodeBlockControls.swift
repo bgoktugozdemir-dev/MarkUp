@@ -620,7 +620,8 @@ final class ReaderOverflowTable: NSTextTable {
               let bottom = layout.lineFragmentRect(
                 forGlyphAt: layout.glyphIndexForCharacter(
                   at: rows[CodeBlockRecord.limitedRows + 1]), effectiveRange: nil)
-              record.rowPitch = max(1, (bottom.minY - top.minY) / CGFloat(CodeBlockRecord.limitedRows))
+              record.rowPitch = max(
+                1, (bottom.minY - top.minY) / CGFloat(CodeBlockRecord.limitedRows))
             }
           }
           if record.limited, unfolded, record.canLimit, record.range.length > 1 {
@@ -896,7 +897,8 @@ final class ReaderOverflowTable: NSTextTable {
   func scrollWheel(_ event: NSEvent) -> Bool {
     guard let text = textView else { return false }
     let point = text.convert(event.locationInWindow, from: nil)
-    guard let record = records.first(where: { !$0.wrap && !$0.embedded && $0.frame.contains(point) }),
+    guard
+      let record = records.first(where: { !$0.wrap && !$0.embedded && $0.frame.contains(point) }),
       maximumOffset(record) > 0
     else { return false }
     let horizontal =

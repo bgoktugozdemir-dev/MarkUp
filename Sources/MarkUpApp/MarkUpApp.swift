@@ -413,14 +413,16 @@ struct ReaderView: View {
           Label(localized("Outline"), systemImage: "list.bullet.indent")
         }
         .disabled(!room.outline)
-        .help(room.outline ? localized("Outline") : localized("Widen the window to show this panel"))
+        .help(
+          room.outline ? localized("Outline") : localized("Widen the window to show this panel"))
         Button {
           settings.value.showMinimap.toggle()
         } label: {
           Label(localized("Minimap"), systemImage: "sidebar.right")
         }
         .disabled(!room.minimap)
-        .help(room.minimap ? localized("Minimap") : localized("Widen the window to show this panel"))
+        .help(
+          room.minimap ? localized("Minimap") : localized("Widen the window to show this panel"))
       }
       ToolbarItemGroup {
         Button {

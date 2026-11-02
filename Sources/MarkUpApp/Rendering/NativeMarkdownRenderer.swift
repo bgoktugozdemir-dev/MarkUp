@@ -77,7 +77,9 @@ final class NativeMarkdownRenderer {
     paragraph.lineBreakMode = .byWordWrapping
     let result = NSMutableAttributedString(
       string: document.source,
-      attributes: [.font: codeFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
+      attributes: [
+        .font: codeFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph,
+      ]
     )
     for token in tokens
     where token.range.location >= 0 && token.range.length >= 0
