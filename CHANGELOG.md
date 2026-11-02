@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.1.0 — 2026-11-02
+## 0.1.1 — 2026-11-02
+
+The `v0.1.0` tag was never published: its release run stopped at CI checks, fixed here.
 
 Initial native MarkUp reader implementation: CommonMark/GFM, semantic alerts, language-aware highlighting, independent themes and typography, English/Turkish controls, navigation, persistent annotations, file monitoring, PDF/printing, sandboxed resource handling, and Sparkle distribution preparation.
 
