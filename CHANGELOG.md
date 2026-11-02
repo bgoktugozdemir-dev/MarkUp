@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 0.1.0
+## 0.1.0 — 2026-11-02
 
 Initial native MarkUp reader implementation: CommonMark/GFM, semantic alerts, language-aware highlighting, independent themes and typography, English/Turkish controls, navigation, persistent annotations, file monitoring, PDF/printing, sandboxed resource handling, and Sparkle distribution preparation.
 
@@ -14,4 +14,4 @@ The app icon now uses the owner-supplied blue book artwork; build 2 prepares the
 
 Debug builds are now a separate test environment, MarkUp Dev, with its own bundle ID and sandbox data, an orange DEV icon badge and a DEV label in the status bar; it never checks for updates.
 
-This entry describes development scope, not a published release. Executed checks and outstanding gates are tracked in `docs/VERIFICATION.md`.
+First Developer ID signed and notarized release. Executed checks and outstanding gates are tracked in `docs/VERIFICATION.md`.
