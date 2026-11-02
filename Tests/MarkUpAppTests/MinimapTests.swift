@@ -169,7 +169,10 @@ struct MinimapTests {
         }
       }
     }
-    #expect(red > 3 && blue > 3 && green > 20)
+    #expect(
+      red > 3 && blue > 3 && green > 20,
+      "red=\(red) blue=\(blue) green=\(green) tiles=\(images.count) scale=\(reader.window.backingScaleFactor)"
+    )
     #expect(
       darkSurface > 200, "Offscreen code panel must use the tile region, not the reader viewport")
     let record = try #require(reader.controls.records.first { $0.kind == .code })
