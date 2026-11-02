@@ -328,7 +328,7 @@ struct ReaderView: View {
 
   /// Panels float over the reader, so each is offered only when it fits beside the text.
   private func updateRoom(width: CGFloat) {
-    let text = max(180, min(settings.value.contentWidth, width - 64))
+    let text = max(180, min(CGFloat(settings.value.contentWidth), width - 64))
     let margin = (width - text) / 2
     let next = PanelRoom(outline: margin >= 222, minimap: margin >= 138)
     guard next != room else { return }

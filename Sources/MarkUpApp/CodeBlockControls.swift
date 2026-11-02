@@ -470,7 +470,8 @@ final class ReaderOverflowTable: NSTextTable {
         wrap: isTable ? false : saved?.wrap ?? preferences.wrapCode,
         numbers: isTable ? false : saved?.numbers ?? preferences.lineNumbers, kind: block.kind,
         tableWidth: isTable
-          ? CGFloat(max(1, source.table?.rows.map(\.count).max() ?? 1)) * 160 * preferences.zoom
+          ? CGFloat(max(1, source.table?.rows.map(\.count).max() ?? 1)) * 160
+            * CGFloat(preferences.zoom)
           : nil,
         surfaceColor: rendered.attributedString.attribute(
           .backgroundColor, at: range.location, effectiveRange: nil) as? NSColor

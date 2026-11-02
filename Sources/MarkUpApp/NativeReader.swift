@@ -114,7 +114,8 @@ struct NativeReader: NSViewRepresentable {
     let anchor = context.coordinator.readingAnchor()
     let originalVisibleCharacter = anchor?.character ?? 0
     text.frame.size.width = scroll.contentSize.width
-    let width = max(180, min(preferences.contentWidth, scroll.contentSize.width - 64))
+    let width = max(
+      180, min(CGFloat(preferences.contentWidth), scroll.contentSize.width - 64))
     let widthChanged = abs(originalContainerWidth - width) > 0.5
     text.textContainerInset.width = max(20, (scroll.contentSize.width - width) / 2)
     text.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
