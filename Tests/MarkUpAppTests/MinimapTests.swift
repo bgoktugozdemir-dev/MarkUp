@@ -161,7 +161,8 @@ struct MinimapTests {
             let r = Int(pixels[index])
             let g = Int(pixels[index + 1])
             let b = Int(pixels[index + 2])
-            if r > 150 && g < 100 && b < 100 { red += 1 }
+            // At 1x the thin red glyphs blend with the dark code panel, so test red dominance.
+            if r > 120 && r > g * 2 && r > b * 2 { red += 1 }
             if b > 150 && r < 100 && g < 100 { blue += 1 }
             if g > 150 && r < 100 && b < 100 { green += 1 }
             if r > 20 && r < 65 && g > 20 && g < 65 && b > 20 && b < 65 { darkSurface += 1 }
