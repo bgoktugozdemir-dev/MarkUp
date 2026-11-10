@@ -23,6 +23,7 @@ struct CodeBlockControlsTests {
     preferences.wrapCode = false
     preferences.lineNumbers = false
     preferences.codeSize = codeSize
+    preferences.limitCodeHeight = true
     let rendered = NativeMarkdownRenderer().render(
       document: document, preferences: preferences, tokens: [:])
     let storage = NSTextStorage()
@@ -60,6 +61,116 @@ struct CodeBlockControlsTests {
     return Reader(
       view: view, layout: layout, container: container, controls: controls, rendered: rendered,
       document: document, preferences: preferences, window: window)
+  }
+
+  @Test func codePanelsDoNotOverlapAdjacentParagraphs() async throws {
+    for lineCount in [3, 25] {
+      let code = (0..<lineCount).map { "let value\($0) = \($0)\n" }.joined()
+      for separator in ["\n", "\n\n"] {
+        let reader = try await reader("Before." + separator + "```swift\n" + code + "```\nAfter.")
+        defer { reader.window.close() }
+        let record = try #require(reader.controls.records.first)
+        let source = reader.view.string as NSString
+        let origin = reader.view.textContainerOrigin
+        for (label, before) in [("Before.", true), ("After.", false)] {
+          let characters = source.range(of: label)
+          let glyphs = reader.layout.glyphRange(
+            forCharacterRange: characters, actualCharacterRange: nil)
+          let bounds = reader.layout.boundingRect(forGlyphRange: glyphs, in: reader.container)
+            .offsetBy(dx: origin.x, dy: origin.y)
+          if before {
+            #expect(bounds.maxY <= record.panelFrame.minY)
+          } else {
+            #expect(bounds.minY >= record.panelFrame.maxY)
+          }
+        }
+      }
+    }
+  }
+
+  @Test func codePanelsDoNotOverlapHardBreaksOrEachOther() async throws {
+    let code = (0..<25).map { "let value\($0) = \($0)\n" }.joined()
+    let source =
+      "### Heading\n\nFile: `path/to/file.swift`  \n(Details)  \nBefore.\n```swift\n"
+      + code + "```\nAfter.\n```swift\n" + code + "```\nEnd."
+    let reader = try await reader(source)
+    defer { reader.window.close() }
+    #expect(reader.controls.records.count == 2)
+    let text = reader.view.string as NSString
+    let origin = reader.view.textContainerOrigin
+    for (index, label) in ["Before.", "After."].enumerated() {
+      let glyphs = reader.layout.glyphRange(
+        forCharacterRange: text.range(of: label), actualCharacterRange: nil)
+      let bounds = reader.layout.boundingRect(forGlyphRange: glyphs, in: reader.container)
+        .offsetBy(dx: origin.x, dy: origin.y)
+      #expect(
+        bounds.maxY <= reader.controls.records[index].panelFrame.minY,
+        "Panel \(index), embedded: \(reader.controls.records[index].embedded), bounds: \(bounds), panel: \(reader.controls.records[index].panelFrame)"
+      )
+      if index > 0 { #expect(bounds.minY >= reader.controls.records[index - 1].panelFrame.maxY) }
+    }
+  }
+
+  @Test(arguments: [1, 12, 50])
+  func configuredRowLimitControlsFoldAndViewport(rows: Int) async throws {
+    let reader = try await reader("```swift\n" + String(repeating: "value\n", count: 60) + "```")
+    defer { reader.window.close() }
+    var preferences = reader.preferences
+    preferences.codeBlockVisibleRows = rows
+    let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+    reader.controls.prepare(
+      display, rendered: reader.rendered, document: reader.document, preferences: preferences)
+    reader.view.textStorage?.setAttributedString(display)
+    reader.view.fitDocument()
+    reader.controls.updateFrames()
+    let record = try #require(reader.controls.records.first)
+    #expect(record.embedded)
+    #expect(record.limitedRows == rows)
+    #expect(abs(record.viewportHeight - record.rowPitch * CGFloat(rows)) < 0.01)
+    #expect(record.rowPitch > 1 && record.rowPitch < 40)
+  }
+
+  @Test(arguments: [1, 12, 50])
+  func blocksFoldOnlyWhenTheyExceedTheConfiguredLimit(rows: Int) async throws {
+    for extra in [0, 1] {
+      let reader = try await reader(
+        "```swift\n" + String(repeating: "value\n", count: rows + extra) + "```")
+      defer { reader.window.close() }
+      var preferences = reader.preferences
+      preferences.codeBlockVisibleRows = rows
+      let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+      reader.controls.prepare(
+        display, rendered: reader.rendered, document: reader.document, preferences: preferences)
+      reader.view.textStorage?.setAttributedString(display)
+      reader.view.fitDocument()
+      reader.controls.updateFrames()
+      #expect(reader.controls.records.first?.embedded == (extra == 1))
+    }
+  }
+
+  @Test func globalFoldPreferenceOverridesManualBlockChoice() async throws {
+    let reader = try await reader("```swift\n" + String(repeating: "value\n", count: 30) + "```")
+    defer { reader.window.close() }
+    let first = try #require(reader.controls.records.first)
+    reader.controls.toggleLimit(first.id, enabled: false)
+    var preferences = reader.preferences
+    preferences.limitCodeHeight = false
+    func refresh() {
+      let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+      reader.controls.prepare(
+        display, rendered: reader.rendered, document: reader.document, preferences: preferences)
+      reader.view.textStorage?.setAttributedString(display)
+      reader.view.fitDocument()
+      reader.controls.updateFrames()
+    }
+    refresh()
+    #expect(reader.controls.records.first?.limited == false)
+    preferences.limitCodeHeight = true
+    refresh()
+    #expect(reader.controls.records.first?.embedded == true)
+    preferences.limitCodeHeight = false
+    refresh()
+    #expect(reader.controls.records.first?.limited == false)
   }
 
   @Test func horizontalCodeUsesNativeHitTestingAndContinuousCopy() async throws {

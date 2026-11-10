@@ -86,6 +86,7 @@
 "Limit code height" = "Kod yüksekliğini sınırla";
 "Line Spacing" = "Satır Aralığı";
 "Line numbers for this code block" = "Bu kod bloğunun satır numaraları";
+"Maximum visible code rows" = "Gösterilecek en fazla kod satırı";
 "Lines" = "Satırlar";
 "Load Remote Images" = "Uzak Görselleri Yükle";
 "Loading document…" = "Belge yükleniyor…";

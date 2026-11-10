@@ -29,7 +29,8 @@ public struct ReaderPreferences: Codable, Sendable, Equatable {
   public var showMinimap = true
   public var showOutline = false
   public var wrapCode = true
-  public var limitCodeHeight: Bool? = true
+  public var limitCodeHeight: Bool? = false
+  public var codeBlockVisibleRows: Int? = 12
   public var lineNumbers = false
   public var allowRemoteImages = false
   public var externalEditorBookmark: Data?
@@ -43,6 +44,7 @@ public struct ReaderPreferences: Codable, Sendable, Equatable {
       headingSizes.allSatisfy({ (8...96).contains($0) }),
       (0...30).contains(lineSpacing), (0...60).contains(paragraphSpacing),
       (320...1800).contains(contentWidth), (0.5...3).contains(zoom),
+      (1...50).contains(codeBlockVisibleRows ?? 12),
       [bodyFont, headingFont, codeFont].allSatisfy({
         !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.utf8.count <= 128
           && $0.rangeOfCharacter(from: .controlCharacters) == nil
