@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.1.2 — 2026-11-10
+## 0.2.0 — 2026-11-10
 
 Fixed folded code blocks overlapping preceding text when multiple blocks appear in a document.
+Code blocks are expanded by default for new preferences. The Code settings can show long blocks in a short view with a configurable limit of 1–50 visual rows; existing preferences keep their choice.
 
 ## 0.1.1 — 2026-11-02
 

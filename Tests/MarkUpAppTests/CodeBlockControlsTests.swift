@@ -23,6 +23,7 @@ struct CodeBlockControlsTests {
     preferences.wrapCode = false
     preferences.lineNumbers = false
     preferences.codeSize = codeSize
+    preferences.limitCodeHeight = true
     let rendered = NativeMarkdownRenderer().render(
       document: document, preferences: preferences, tokens: [:])
     let storage = NSTextStorage()
@@ -108,6 +109,68 @@ struct CodeBlockControlsTests {
       )
       if index > 0 { #expect(bounds.minY >= reader.controls.records[index - 1].panelFrame.maxY) }
     }
+  }
+
+  @Test(arguments: [1, 12, 50])
+  func configuredRowLimitControlsFoldAndViewport(rows: Int) async throws {
+    let reader = try await reader("```swift\n" + String(repeating: "value\n", count: 60) + "```")
+    defer { reader.window.close() }
+    var preferences = reader.preferences
+    preferences.codeBlockVisibleRows = rows
+    let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+    reader.controls.prepare(
+      display, rendered: reader.rendered, document: reader.document, preferences: preferences)
+    reader.view.textStorage?.setAttributedString(display)
+    reader.view.fitDocument()
+    reader.controls.updateFrames()
+    let record = try #require(reader.controls.records.first)
+    #expect(record.embedded)
+    #expect(record.limitedRows == rows)
+    #expect(abs(record.viewportHeight - record.rowPitch * CGFloat(rows)) < 0.01)
+    #expect(record.rowPitch > 1 && record.rowPitch < 40)
+  }
+
+  @Test(arguments: [1, 12, 50])
+  func blocksFoldOnlyWhenTheyExceedTheConfiguredLimit(rows: Int) async throws {
+    for extra in [0, 1] {
+      let reader = try await reader(
+        "```swift\n" + String(repeating: "value\n", count: rows + extra) + "```")
+      defer { reader.window.close() }
+      var preferences = reader.preferences
+      preferences.codeBlockVisibleRows = rows
+      let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+      reader.controls.prepare(
+        display, rendered: reader.rendered, document: reader.document, preferences: preferences)
+      reader.view.textStorage?.setAttributedString(display)
+      reader.view.fitDocument()
+      reader.controls.updateFrames()
+      #expect(reader.controls.records.first?.embedded == (extra == 1))
+    }
+  }
+
+  @Test func globalFoldPreferenceOverridesManualBlockChoice() async throws {
+    let reader = try await reader("```swift\n" + String(repeating: "value\n", count: 30) + "```")
+    defer { reader.window.close() }
+    let first = try #require(reader.controls.records.first)
+    reader.controls.toggleLimit(first.id, enabled: false)
+    var preferences = reader.preferences
+    preferences.limitCodeHeight = false
+    func refresh() {
+      let display = NSMutableAttributedString(attributedString: reader.rendered.attributedString)
+      reader.controls.prepare(
+        display, rendered: reader.rendered, document: reader.document, preferences: preferences)
+      reader.view.textStorage?.setAttributedString(display)
+      reader.view.fitDocument()
+      reader.controls.updateFrames()
+    }
+    refresh()
+    #expect(reader.controls.records.first?.limited == false)
+    preferences.limitCodeHeight = true
+    refresh()
+    #expect(reader.controls.records.first?.embedded == true)
+    preferences.limitCodeHeight = false
+    refresh()
+    #expect(reader.controls.records.first?.limited == false)
   }
 
   @Test func horizontalCodeUsesNativeHitTestingAndContinuousCopy() async throws {

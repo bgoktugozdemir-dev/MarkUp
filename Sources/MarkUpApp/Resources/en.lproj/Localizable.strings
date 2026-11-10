@@ -86,6 +86,7 @@
 "Limit code height" = "Limit code height";
 "Line Spacing" = "Line Spacing";
 "Line numbers for this code block" = "Line numbers for this code block";
+"Maximum visible code rows" = "Maximum visible code rows";
 "Lines" = "Lines";
 "Load Remote Images" = "Load Remote Images";
 "Loading document…" = "Loading document…";

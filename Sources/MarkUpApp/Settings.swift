@@ -149,6 +149,13 @@ import SwiftUI
           isOn: Binding(
             get: { settings.value.limitCodeHeight ?? true },
             set: { settings.value.limitCodeHeight = $0 }))
+        Stepper(
+          "\(localized("Maximum visible code rows")): \(settings.value.codeBlockVisibleRows ?? 12)",
+          value: Binding(
+            get: { settings.value.codeBlockVisibleRows ?? 12 },
+            set: { settings.value.codeBlockVisibleRows = $0 }), in: 1...50
+        )
+        .disabled(!(settings.value.limitCodeHeight ?? true))
         Toggle(localized("Show line numbers"), isOn: $settings.value.lineNumbers)
         ThemePreview(
           theme: previewTheme, fontName: settings.value.codeFont, fontSize: settings.value.codeSize)
@@ -158,6 +165,7 @@ import SwiftUI
           settings.value.automaticTheme = defaults.automaticTheme
           settings.value.wrapCode = defaults.wrapCode
           settings.value.limitCodeHeight = defaults.limitCodeHeight
+          settings.value.codeBlockVisibleRows = defaults.codeBlockVisibleRows
           settings.value.lineNumbers = defaults.lineNumbers
         }
       }.tabItem { Label(localized("Code"), systemImage: "curlybraces") }

@@ -277,6 +277,7 @@ final class ReaderOverflowTable: NSTextTable {
   let layoutWidth: CGFloat
   let tabInterval: CGFloat
   let surfaceColor: NSColor
+  let limitedRows: Int
   var wrap: Bool
   var numbers: Bool
   var offset: CGFloat = 0
@@ -285,17 +286,15 @@ final class ReaderOverflowTable: NSTextTable {
   var headerFrame: CGRect = .zero
   var scrollbarFrame: CGRect = .zero
   var measuredGeometryRevision = -1
-  /// Fully visible rows in the short view; half of one further row shows at the bottom edge.
-  static let limitedRows = 12
   var limited = true
   var hiddenRanges: [NSRange] = []
   /// Character index of every visual row, measured from the unfolded layout.
   var rowStarts: [Int]?
   var rowPitch: CGFloat = 16
-  var canLimit: Bool { (rowStarts?.count ?? 0) > Self.limitedRows + 1 }
+  var canLimit: Bool { (rowStarts?.count ?? 0) > limitedRows }
   /// A short block hides its code in the reader flow and shows it in its own scroll view.
   var embedded: Bool { limited && !hiddenRanges.isEmpty }
-  var viewportHeight: CGFloat { rowPitch * (CGFloat(Self.limitedRows) + 0.5) }
+  var viewportHeight: CGFloat { rowPitch * CGFloat(limitedRows) }
   var panelFrame: CGRect = .zero
   var controlColor: NSColor {
     let rgb = surfaceColor.usingColorSpace(.deviceRGB)
@@ -312,7 +311,8 @@ final class ReaderOverflowTable: NSTextTable {
   init(
     id: String, range: NSRange, original: String, language: String, indent: CGFloat,
     font: NSFont, wrap: Bool, numbers: Bool, kind: MarkdownBlockKind = .code,
-    tableWidth: CGFloat? = nil, surfaceColor: NSColor = .textBackgroundColor
+    tableWidth: CGFloat? = nil, surfaceColor: NSColor = .textBackgroundColor,
+    limitedRows: Int = 12
   ) {
     self.kind = kind
     self.id = id
@@ -323,6 +323,7 @@ final class ReaderOverflowTable: NSTextTable {
     self.wrap = wrap
     self.numbers = numbers
     self.surfaceColor = surfaceColor
+    self.limitedRows = limitedRows
     tabInterval = max(1, (" " as NSString).size(withAttributes: [.font: font]).width * 4)
     let source = original as NSString
     var starts = [range.location]
@@ -428,6 +429,9 @@ final class ReaderOverflowTable: NSTextTable {
     _ display: NSMutableAttributedString, rendered: RenderedDocument,
     document: MarkdownDocument?, preferences: ReaderPreferences
   ) {
+    if currentPreferences.limitCodeHeight != preferences.limitCodeHeight {
+      for id in overrides.keys { overrides[id]?.limited = nil }
+    }
     currentPreferences = preferences
     geometryRevision += 1
     previewRevision += 1
@@ -477,7 +481,8 @@ final class ReaderOverflowTable: NSTextTable {
           : nil,
         surfaceColor: rendered.attributedString.attribute(
           .backgroundColor, at: range.location, effectiveRange: nil) as? NSColor
-          ?? .textBackgroundColor)
+          ?? .textBackgroundColor,
+        limitedRows: preferences.codeBlockVisibleRows ?? 12)
       record.offset = record.wrap ? 0 : saved?.offset ?? 0
       record.limited = !isTable && (saved?.limited ?? preferences.limitCodeHeight ?? true)
       if isTable {
@@ -616,15 +621,15 @@ final class ReaderOverflowTable: NSTextTable {
           }
           if unfolded {
             record.rowStarts = rows
-            if rows.count > CodeBlockRecord.limitedRows + 1 {
-              // Row 0 carries the toolbar spacing, so measure the pitch from row 1.
-              let top = layout.lineFragmentRect(
-                forGlyphAt: layout.glyphIndexForCharacter(at: rows[1]), effectiveRange: nil)
-              let bottom = layout.lineFragmentRect(
-                forGlyphAt: layout.glyphIndexForCharacter(
-                  at: rows[CodeBlockRecord.limitedRows + 1]), effectiveRange: nil)
+            if rows.count > 1 {
+              let firstGlyph = layout.glyphIndexForCharacter(at: rows[0])
+              let secondGlyph = layout.glyphIndexForCharacter(at: rows[1])
+              let first = layout.lineFragmentRect(forGlyphAt: firstGlyph, effectiveRange: nil)
+              let second = layout.lineFragmentRect(forGlyphAt: secondGlyph, effectiveRange: nil)
               record.rowPitch = max(
-                1, (bottom.minY - top.minY) / CGFloat(CodeBlockRecord.limitedRows))
+                1,
+                second.minY + layout.location(forGlyphAt: secondGlyph).y
+                  - first.minY - layout.location(forGlyphAt: firstGlyph).y)
             }
           }
           if record.limited, unfolded, record.canLimit, record.range.length > 1 {
@@ -999,10 +1004,12 @@ final class ReaderOverflowTable: NSTextTable {
       if let cached = previewTexts[record.id] {
         preview = cached
       } else {
-        guard let rows = record.rowStarts, rows.count > CodeBlockRecord.limitedRows + 1,
+        guard let rows = record.rowStarts, rows.count > record.limitedRows,
           NSMaxRange(record.range) <= storage.length
         else { continue }
-        let end = rows[CodeBlockRecord.limitedRows + 1]
+        let end =
+          rows.count > record.limitedRows + 1
+          ? rows[record.limitedRows + 1] : NSMaxRange(record.range) - 1
         preview = CodeBlockViewport.displayText(
           storage.attributedSubstring(
             from: NSRange(location: record.range.location, length: end - record.range.location)),

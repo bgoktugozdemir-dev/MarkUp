@@ -4,6 +4,26 @@ import Testing
 @testable import MarkUpCore
 
 struct PreferenceTests {
+  @Test func codeBlockHeightPreferencesAreBackwardCompatibleAndValidated() throws {
+    var preferences = ReaderPreferences()
+    #expect(preferences.limitCodeHeight == false)
+    #expect(preferences.codeBlockVisibleRows == 12)
+    preferences.limitCodeHeight = true
+    preferences.codeBlockVisibleRows = 50
+    #expect(try ReaderPreferences.decode(preferences.exported()) == preferences)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: preferences.exported()) as? [String: Any])
+    object.removeValue(forKey: "limitCodeHeight")
+    object.removeValue(forKey: "codeBlockVisibleRows")
+    let old = try ReaderPreferences.decode(JSONSerialization.data(withJSONObject: object))
+    #expect(old.limitCodeHeight ?? true)
+    #expect(old.codeBlockVisibleRows ?? 12 == 12)
+    preferences.codeBlockVisibleRows = 0
+    #expect(throws: PreferenceError.self) { try preferences.validated() }
+    preferences.codeBlockVisibleRows = 51
+    #expect(throws: PreferenceError.self) { try preferences.validated() }
+  }
+
   @Test func versionOneWithoutOptionalWeightsKeepsSafeDefaults() throws {
     let encoded = try ReaderPreferences().exported()
     var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
