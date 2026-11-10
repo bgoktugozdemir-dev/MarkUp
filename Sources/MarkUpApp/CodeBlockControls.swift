@@ -171,10 +171,12 @@ final class ReaderOverflowTable: NSTextTable {
     let characters = layoutManager.characterRange(
       forGlyphRange: glyphRange, actualGlyphRange: nil)
     let height = MainActor.assumeIsolated { controls?.reservedHeight(in: characters) }
-    guard let height, height > lineFragmentUsedRect.pointee.height else { return false }
-    let extra = height - lineFragmentUsedRect.pointee.height
+    guard let height else { return false }
+    let toolbarHeight: CGFloat = 52
+    let extra = max(0, height - lineFragmentUsedRect.pointee.height) + toolbarHeight
     lineFragmentRect.pointee.size.height += extra
     lineFragmentUsedRect.pointee.size.height += extra
+    baselineOffset.pointee += toolbarHeight
     return true
   }
 

@@ -62,6 +62,54 @@ struct CodeBlockControlsTests {
       document: document, preferences: preferences, window: window)
   }
 
+  @Test func codePanelsDoNotOverlapAdjacentParagraphs() async throws {
+    for lineCount in [3, 25] {
+      let code = (0..<lineCount).map { "let value\($0) = \($0)\n" }.joined()
+      for separator in ["\n", "\n\n"] {
+        let reader = try await reader("Before." + separator + "```swift\n" + code + "```\nAfter.")
+        defer { reader.window.close() }
+        let record = try #require(reader.controls.records.first)
+        let source = reader.view.string as NSString
+        let origin = reader.view.textContainerOrigin
+        for (label, before) in [("Before.", true), ("After.", false)] {
+          let characters = source.range(of: label)
+          let glyphs = reader.layout.glyphRange(
+            forCharacterRange: characters, actualCharacterRange: nil)
+          let bounds = reader.layout.boundingRect(forGlyphRange: glyphs, in: reader.container)
+            .offsetBy(dx: origin.x, dy: origin.y)
+          if before {
+            #expect(bounds.maxY <= record.panelFrame.minY)
+          } else {
+            #expect(bounds.minY >= record.panelFrame.maxY)
+          }
+        }
+      }
+    }
+  }
+
+  @Test func codePanelsDoNotOverlapHardBreaksOrEachOther() async throws {
+    let code = (0..<25).map { "let value\($0) = \($0)\n" }.joined()
+    let source =
+      "### Heading\n\nFile: `path/to/file.swift`  \n(Details)  \nBefore.\n```swift\n"
+      + code + "```\nAfter.\n```swift\n" + code + "```\nEnd."
+    let reader = try await reader(source)
+    defer { reader.window.close() }
+    #expect(reader.controls.records.count == 2)
+    let text = reader.view.string as NSString
+    let origin = reader.view.textContainerOrigin
+    for (index, label) in ["Before.", "After."].enumerated() {
+      let glyphs = reader.layout.glyphRange(
+        forCharacterRange: text.range(of: label), actualCharacterRange: nil)
+      let bounds = reader.layout.boundingRect(forGlyphRange: glyphs, in: reader.container)
+        .offsetBy(dx: origin.x, dy: origin.y)
+      #expect(
+        bounds.maxY <= reader.controls.records[index].panelFrame.minY,
+        "Panel \(index), embedded: \(reader.controls.records[index].embedded), bounds: \(bounds), panel: \(reader.controls.records[index].panelFrame)"
+      )
+      if index > 0 { #expect(bounds.minY >= reader.controls.records[index - 1].panelFrame.maxY) }
+    }
+  }
+
   @Test func horizontalCodeUsesNativeHitTestingAndContinuousCopy() async throws {
     let code =
       "let example = \"" + String(repeating: "native_selection_", count: 24)

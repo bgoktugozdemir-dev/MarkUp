@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-11-10
+
+Fixed folded code blocks overlapping preceding text when multiple blocks appear in a document.
+
 ## 0.1.1 — 2026-11-02
 
 The `v0.1.0` tag was never published: its release run stopped at CI checks, fixed here.
