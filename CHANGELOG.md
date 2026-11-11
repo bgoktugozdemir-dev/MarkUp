@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — Unreleased
+## 0.3.0 — 2026-11-11
 
 File → New Window… (⌘N) and New Tab… (⌘T) choose a Markdown file and open it in a separate window or as a tab next to the current one. Open… (⌘O) now replaces the document in the current window or tab; an already open document is brought forward instead.
 The File menu no longer shows a duplicate system Open Recent entry that appeared as an untitled “NSMenuItem” row.
