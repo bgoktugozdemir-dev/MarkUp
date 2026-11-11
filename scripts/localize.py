@@ -5,8 +5,14 @@ import json
 import re
 
 translations = '''Open Recent|Son Kullanılanları Aç
+New Window…|Yeni Pencere…
+New Tab…|Yeni Sekme…
+About %@|%@ Hakkında
+Developed by %@|Geliştiren: %@
+Source Code on GitHub|GitHub'da Kaynak Kodu
 Show all code|Kodun tamamını göster
 Limit code height|Kod yüksekliğini sınırla
+Maximum visible code rows|Gösterilecek en fazla kod satırı
 All code is already visible|Kodun tamamı zaten görünüyor
 Show long code blocks in short view|Uzun kod bloklarını kısa görünümde göster
 View Mode|Görünüm Modu

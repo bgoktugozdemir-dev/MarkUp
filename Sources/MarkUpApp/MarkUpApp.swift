@@ -118,10 +118,20 @@ struct ReaderCommands: Commands {
   }
 
   var body: some Commands {
+    CommandGroup(replacing: .appInfo) {
+      Button(String(format: localized("About %@"), AboutPanel.appName)) { AboutPanel.show() }
+    }
     CommandGroup(after: .appInfo) {
       Button(localized("Check for Updates…")) { UpdateService.shared.check() }
     }
-    CommandGroup(replacing: .newItem) {}
+    CommandGroup(replacing: .newItem) {
+      Button(localized("New Window…")) { DocumentOpener.choose(.newWindow) }
+        .keyboardShortcut("n")
+      Button(localized("New Tab…")) { DocumentOpener.choose(.newTab) }
+        .keyboardShortcut("t")
+      Button(localized("Open…")) { DocumentOpener.choose(.replaceCurrent) }
+        .keyboardShortcut("o")
+    }
     CommandGroup(after: .newItem) {
       Menu(localized("Open Recent")) {
         ForEach(recentDocuments, id: \.self) { url in
@@ -276,6 +286,7 @@ final class ReaderCommandState {
   private func startAfterLaunch() {
     guard !didFinishLaunching else { return }
     didFinishLaunching = true
+    SystemFileMenuCleanup.install()
     refreshRecentDocuments()
   }
 

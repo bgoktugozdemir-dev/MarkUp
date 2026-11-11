@@ -1,6 +1,7 @@
 // App-owned copy. Document content is never translated.
 "A calm place for Markdown." = "Markdown için sakin bir alan.";
 "A calm place to read. Türkçe: İı Şş Ğğ — 123" = "Okumak için sakin bir alan. Türkçe: İı Şş Ğğ — 123";
+"About %@" = "%@ Hakkında";
 "Actual Size" = "Gerçek Boyut";
 "All code is already visible" = "Kodun tamamı zaten görünüyor";
 "Allow remote images by default" = "Uzak görsellere varsayılan olarak izin ver";
@@ -43,6 +44,7 @@
 "Copy code" = "Kodu kopyala";
 "Dark" = "Koyu";
 "Data" = "Veriler";
+"Developed by %@" = "Geliştiren: %@";
 "Dismiss" = "Kapat";
 "Document" = "Belge";
 "Document minimap" = "Belge mini haritası";
@@ -86,15 +88,17 @@
 "Limit code height" = "Kod yüksekliğini sınırla";
 "Line Spacing" = "Satır Aralığı";
 "Line numbers for this code block" = "Bu kod bloğunun satır numaraları";
-"Maximum visible code rows" = "Gösterilecek en fazla kod satırı";
 "Lines" = "Satırlar";
 "Load Remote Images" = "Uzak Görselleri Yükle";
 "Loading document…" = "Belge yükleniyor…";
 "Margins (points)" = "Kenar boşlukları (punto)";
 "Markdown document" = "Markdown belgesi";
+"Maximum visible code rows" = "Gösterilecek en fazla kod satırı";
 "Medium" = "Orta";
 "Minimap" = "Mini Harita";
 "Move these annotations to the current document?" = "Bu işaretler geçerli belgeye taşınsın mı?";
+"New Tab…" = "Yeni Sekme…";
+"New Window…" = "Yeni Pencere…";
 "No other saved annotations are available." = "Başka kayıtlı işaret bulunmuyor.";
 "No readable content" = "Okunabilir içerik yok";
 "OK" = "Tamam";
@@ -146,6 +150,7 @@
 "Show outline" = "Başlıkları göster";
 "Some images need access or are missing, unsupported, or too large." = "Bazı görseller erişim izni gerektiriyor, eksik, desteklenmiyor veya çok büyük.";
 "Source" = "Kaynak";
+"Source Code on GitHub" = "GitHub'da Kaynak Kodu";
 "Storage" = "Depolama";
 "System" = "Sistem";
 "Test build: separate from the installed MarkUp and its data" = "Test sürümü: yüklü MarkUp'tan ve verilerinden ayrıdır";
