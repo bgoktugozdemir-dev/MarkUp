@@ -2,14 +2,14 @@
 
 A native, typography-led Markdown reader for macOS 14 and later. Built with SwiftUI, AppKit, Swift Markdown, and the native text system. Source files are read-only; editing belongs in your chosen external editor.
 
-**Development status:** V1 is implemented and available for local review, with measured warm-open, reload and idle-CPU performance exceptions. A local Developer ID-signed, Apple-notarized Universal package is available; no public release has been published. See [verification](docs/VERIFICATION.md) for executed checks and remaining gates. The app icon uses the owner-supplied artwork in `Branding/MarkUp.png`.
+**Development status:** Developer ID-signed, Apple-notarized Universal builds are published on [GitHub Releases](https://github.com/bgoktugozdemir-dev/MarkUp/releases). Measured warm-open, reload and idle-CPU performance exceptions remain. See [verification](docs/VERIFICATION.md) for executed checks and remaining gates. The app icon uses the owner-supplied artwork in `Branding/MarkUp.png`.
 
 ## Build and run
 
 Requirements: Xcode 26 or later with Swift 6.2 or later (Swift Markdown 0.9.0 requires Swift tools 6.2), macOS 14+, and XcodeGen 2.46.0. The implementation was first built using Xcode 27.1 / Swift 6.4. Both Apple Silicon and Intel slices are required.
 
 ```sh
-git clone <your MarkUp repository URL>
+git clone https://github.com/bgoktugozdemir-dev/MarkUp.git
 cd MarkUp
 xcodegen generate
 open MarkUp.xcodeproj
@@ -30,7 +30,7 @@ xcodebuild -project MarkUp.xcodeproj -scheme MarkUp \
 
 ## Reading
 
-- Open `.md` and `.markdown` files from Finder, the Open command, or drag-and-drop. Each document has its own window; macOS can merge windows into tabs.
+- Open `.md` and `.markdown` files from Finder, the File menu, or drag-and-drop. **Open…** (⌘O) replaces the document in the current window or tab, **New Tab…** (⌘T) adds a tab beside it, and **New Window…** (⌘N) opens a separate window.
 - Read CommonMark/GFM prose, headings, nested lists, tables, tasks, footnotes, and all five GitHub alerts.
 - Select native text across the document. Search, heading outline, semantic reading positions, and a left minimap of the actual rendered content support navigation. Click its preview or drag the viewport to move through the document.
 - Choose body, heading, and code fonts; adjust size, spacing, width, and zoom. Choose six independent code-theme families with nine palettes.
@@ -52,4 +52,4 @@ Mermaid is intentionally readable, copyable source in V1. Math and MDX are not e
 - [Privacy and security](SECURITY.md)
 - [Contributing](CONTRIBUTING.md), [third-party notices](THIRD_PARTY_NOTICES.md)
 
-No analytics, accounts, cloud synchronization, or document uploads. MIT licensed. Theme names describe inspiration and do not imply affiliation with their original products.
+No analytics, accounts, cloud synchronization, or document uploads. MIT licensed. Developed by [Göktuğ Özdemir](https://bgo.dev). Theme names describe inspiration and do not imply affiliation with their original products.

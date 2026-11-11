@@ -1,6 +1,7 @@
 // App-owned copy. Document content is never translated.
 "A calm place for Markdown." = "A calm place for Markdown.";
 "A calm place to read. Türkçe: İı Şş Ğğ — 123" = "A calm place to read. Türkçe: İı Şş Ğğ — 123";
+"About %@" = "About %@";
 "Actual Size" = "Actual Size";
 "All code is already visible" = "All code is already visible";
 "Allow remote images by default" = "Allow remote images by default";
@@ -43,6 +44,7 @@
 "Copy code" = "Copy code";
 "Dark" = "Dark";
 "Data" = "Data";
+"Developed by %@" = "Developed by %@";
 "Dismiss" = "Dismiss";
 "Document" = "Document";
 "Document minimap" = "Document minimap";
@@ -86,15 +88,17 @@
 "Limit code height" = "Limit code height";
 "Line Spacing" = "Line Spacing";
 "Line numbers for this code block" = "Line numbers for this code block";
-"Maximum visible code rows" = "Maximum visible code rows";
 "Lines" = "Lines";
 "Load Remote Images" = "Load Remote Images";
 "Loading document…" = "Loading document…";
 "Margins (points)" = "Margins (points)";
 "Markdown document" = "Markdown document";
+"Maximum visible code rows" = "Maximum visible code rows";
 "Medium" = "Medium";
 "Minimap" = "Minimap";
 "Move these annotations to the current document?" = "Move these annotations to the current document?";
+"New Tab…" = "New Tab…";
+"New Window…" = "New Window…";
 "No other saved annotations are available." = "No other saved annotations are available.";
 "No readable content" = "No readable content";
 "OK" = "OK";
@@ -146,6 +150,7 @@
 "Show outline" = "Show outline";
 "Some images need access or are missing, unsupported, or too large." = "Some images need access or are missing, unsupported, or too large.";
 "Source" = "Source";
+"Source Code on GitHub" = "Source Code on GitHub";
 "Storage" = "Storage";
 "System" = "System";
 "Test build: separate from the installed MarkUp and its data" = "Test build: separate from the installed MarkUp and its data";

@@ -2,7 +2,9 @@
 
 | Shortcut | Action |
 | --- | --- |
-| ⌘O | Open Markdown |
+| ⌘O | Open Markdown in the current window or tab |
+| ⌘T | Open Markdown in a new tab |
+| ⌘N | Open Markdown in a new window |
 | ⌘W | Close the current document/settings window |
 | ⌘F | Find in document |
 | ⌘G / ⇧⌘G | Next / previous match |
